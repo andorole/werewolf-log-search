@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+<script src="./log-data.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;}
+body{margin:0;}
+input,select,button,textarea{font-family:inherit;}
+input,select{color-scheme:dark;}
+input::placeholder{color:oklch(0.46 0.02 255);}
+button{appearance:none;-webkit-appearance:none;background:none;}
+a{color:oklch(0.78 0.15 75);text-decoration:none;}
+a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
+</style>
+</helmet>
+<div style="min-height:100vh; background:oklch(0.15 0.018 255); color:oklch(0.93 0.008 255); font-family:'Noto Sans JP',sans-serif; padding:56px 24px 96px;">
+  <div style="max-width:1080px; margin:0 auto;">
+
+    <div style="margin-bottom:32px;">
+      <div style="font-size:12px; font-weight:700; letter-spacing:0.12em; color:{{ eyebrowColor }}; text-transform:uppercase; margin-bottom:10px;">非公式ファンツール ・ プレイ記録検索</div>
+      <h1 style="font-size:36px; font-weight:800; margin:0 0 10px; letter-spacing:-0.01em;">人狼ログ検索</h1>
+      <p style="font-size:15px; color:oklch(0.66 0.02 255); margin:0; max-width:640px; line-height:1.7;">プレイヤー名やトリップから、参加した村のログを横断検索します。名前・トリップの完全一致に対応。</p>
+      <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-top:16px; padding:6px 14px; border:1px solid oklch(0.30 0.02 255); border-radius:999px; font-size:12px; color:oklch(0.66 0.02 255);">サンプルデータ {{ totalCount }} 件を収録中</div>
+      </sc-if>
+    </div>
+
+    <div style="background:oklch(0.205 0.02 255); border:1px solid oklch(0.28 0.02 255); border-radius:16px; padding:28px; box-shadow:0 24px 48px -24px rgba(0,0,0,0.6);">
+
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:240px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:8px;">名前</label>
+          <input type="text" value="{{ name }}" onChange="{{ onNameChange }}" placeholder="プレイヤー名（例: しろ）" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:11px 14px; font-size:15px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+          <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:6px;">「,」区切りで複数指定・完全一致</div>
+        </div>
+        <div style="flex:1; min-width:240px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:8px;">トリップ</label>
+          <input type="text" value="{{ trip }}" onChange="{{ onTripChange }}" placeholder="トリップ（例: Sr0w9k）" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:11px 14px; font-size:15px; color:oklch(0.93 0.008 255); font-family:ui-monospace,'SF Mono',Menlo,monospace;" style-focus="border-color:oklch(0.58 0.02 255);" />
+          <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:6px;">「,」区切りで複数指定・完全一致</div>
+        </div>
+      </div>
+
+      <div style="display:flex; align-items:center; gap:20px; margin-top:18px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:oklch(0.85 0.008 255); cursor:pointer;">
+          <input type="checkbox" checked="{{ apiIncludeOneNight }}" onChange="{{ onToggleIncludeOneNight }}" style="width:16px; height:16px;" />
+          ワンナイトを含む
+        </label>
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; color:oklch(0.85 0.008 255); cursor:pointer;">
+          <input type="checkbox" checked="{{ apiIncludeWordWolf }}" onChange="{{ onToggleIncludeWordWolf }}" style="width:16px; height:16px;" />
+          ワードウルフを含む
+        </label>
+      </div>
+
+      <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:12px; max-width:760px; line-height:1.6;">上の「名前」「トリップ」「村名」「開催日」「凸死ログ除外」の条件で有志運営の検索API(zinrostats)に問い合わせます。名前・トリップは完全一致、村名は部分一致です。検索するたびに前回の取得結果は入れ替わります（積み上がりません）。</div>
+
+      <div style="display:flex; gap:12px; align-items:center; margin-top:14px; flex-wrap:wrap;">
+        <button onClick="{{ runApiSearchHandler }}" disabled="{{ apiLoading }}" style="{{ apiSearchButtonStyle }}">{{ apiSearchButtonLabel }}</button>
+        <sc-if value="{{ hasImportedLogs }}" hint-placeholder-val="{{ false }}">
+          <button onClick="{{ clearImported }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.66 0.02 255); font-size:13px; font-weight:600; padding:10px 16px; border-radius:8px; cursor:pointer;">取得済みをクリア（{{ importedCount }}件）</button>
+        </sc-if>
+      </div>
+
+      <div style="margin-top:10px;">
+        <a href="{{ apiRequestUrl }}" target="_blank" rel="noopener" style="font-size:12px; color:oklch(0.56 0.02 255); font-family:ui-monospace,'SF Mono',Menlo,monospace; word-break:break-all;">{{ apiRequestUrl }}</a>
+      </div>
+
+      <sc-if value="{{ apiSearched }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:14px;">
+          <sc-if value="{{ apiHasError }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px; border:1px solid oklch(0.55 0.15 25); background:oklch(0.55 0.15 25 / 0.12); border-radius:10px; font-size:13px; color:oklch(0.85 0.1 25);">{{ apiErrorMessage }}</div>
+          </sc-if>
+          <sc-if value="{{ apiHasResult }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:12px 14px; border:1px solid oklch(0.6 0.13 165); background:oklch(0.6 0.13 165 / 0.12); border-radius:10px; font-size:13px; color:oklch(0.8 0.1 165);">{{ apiResultMessage }}</div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <div style="display:flex; align-items:center; gap:14px; margin-top:20px; flex-wrap:wrap;">
+        <span style="font-size:13px; font-weight:700;">一致条件</span>
+        <div style="display:flex; gap:8px;">
+          <button onClick="{{ setMatchOr }}" style="{{ matchOrStyle }}">いずれか一致（OR）</button>
+          <button onClick="{{ setMatchAnd }}" style="{{ matchAndStyle }}">両方一致（AND）</button>
+        </div>
+        <span style="font-size:12px; color:oklch(0.46 0.02 255);">名前・トリップを両方入力した場合の判定方法</span>
+      </div>
+
+      <button onClick="{{ toggleAdvanced }}" style="margin-top:22px; border:none; color:oklch(0.66 0.02 255); font-size:13px; font-weight:600; cursor:pointer; padding:0;">{{ advancedLabel }}</button>
+
+      <sc-if value="{{ advancedOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:20px; padding-top:20px; border-top:1px solid oklch(0.28 0.02 255);">
+
+          <div style="display:flex; flex-direction:column; gap:16px;">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">ゲームモード</label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ modeOptions }}" as="opt" hint-placeholder-count="3">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">参加陣営</label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ factionOptions }}" as="opt" hint-placeholder-count="5">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">役職</label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ roleOptions }}" as="opt" hint-placeholder-count="14">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">勝敗結果</label>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <sc-for list="{{ outcomeOptions }}" as="opt" hint-placeholder-count="5">
+                  <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="height:1px; background:oklch(0.28 0.02 255); margin:20px 0;"></div>
+
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:20px;">
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">村名</label>
+              <input type="text" value="{{ villageQuery }}" onChange="{{ onVillageQueryChange }}" placeholder="村名で検索" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">凸死ログ</label>
+              <button onClick="{{ toggleExcludeTimeout }}" style="{{ excludeTimeoutStyle }}">凸死ログを除外する</button>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">開催日</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="date" value="{{ dateFrom }}" onChange="{{ onDateFromChange }}" style="flex:1; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+                <span style="color:oklch(0.46 0.02 255); font-size:12px;">〜</span>
+                <input type="date" value="{{ dateTo }}" onChange="{{ onDateToChange }}" style="flex:1; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">参加人数</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" value="{{ minPlayers }}" onChange="{{ onMinPlayersChange }}" placeholder="最小" style="width:100%; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+                <span style="color:oklch(0.46 0.02 255); font-size:12px;">〜</span>
+                <input type="number" value="{{ maxPlayers }}" onChange="{{ onMaxPlayersChange }}" placeholder="最大" style="width:100%; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">メッセージ数</label>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <input type="number" value="{{ minMessages }}" onChange="{{ onMinMessagesChange }}" placeholder="最小" style="width:100%; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+                <span style="color:oklch(0.46 0.02 255); font-size:12px;">〜</span>
+                <input type="number" value="{{ maxMessages }}" onChange="{{ onMaxMessagesChange }}" placeholder="最大" style="width:100%; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:9px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+              </div>
+            </div>
+            <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">並び順</label>
+              <div style="display:flex; gap:8px;">
+                <select value="{{ sortField }}" onChange="{{ onSortFieldChange }}" style="flex:1; min-width:0; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);">
+                  <option value="date">開催日</option>
+                  <option value="messages">発言数</option>
+                  <option value="name">村名</option>
+                </select>
+                <button onClick="{{ toggleSortDir }}" style="white-space:nowrap; border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 14px; font-size:13px; font-weight:600; color:oklch(0.93 0.008 255); cursor:pointer;">{{ sortDirLabel }}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display:flex; justify-content:flex-end; margin-top:22px;">
+        <button onClick="{{ resetFilters }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.66 0.02 255); font-size:13px; font-weight:600; padding:9px 18px; border-radius:8px; cursor:pointer;">フィルターをリセット</button>
+      </div>
+    </div>
+
+    <div style="margin-top:32px;">
+      <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
+        <div style="font-size:14px; color:oklch(0.66 0.02 255); margin-bottom:16px;">{{ filteredCount }} 件中 {{ rangeStart }}〜{{ rangeEnd }} 件目を表示</div>
+
+        <sc-if value="{{ hasMatchStats }}" hint-placeholder-val="{{ false }}">
+          <div style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; padding:10px 16px; border:1px solid oklch(0.30 0.02 255); border-radius:10px; font-size:13px; color:oklch(0.85 0.008 255); background:oklch(0.19 0.02 255);">
+            <span style="font-weight:700;">一致した対戦成績</span>
+            <span>{{ matchTotalLabel }}</span>
+            <span style="color:oklch(0.66 0.02 255);">{{ matchBreakdownLabel }}</span>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center; padding:64px 24px; color:oklch(0.46 0.02 255); border:1px dashed oklch(0.30 0.02 255); border-radius:16px; font-size:14px;">条件に一致するログが見つかりませんでした。条件を変えてお試しください。</div>
+        </sc-if>
+
+        <div style="{{ listContainerStyle }}">
+          <sc-for list="{{ resultsView }}" as="item" hint-placeholder-count="6">
+            <div style="{{ item.cardStyle }}">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                  <a href="{{ item.logUrl }}" target="_blank" rel="noopener" style="font-size:17px; font-weight:700; color:oklch(0.93 0.008 255);" style-hover="color:oklch(0.98 0.008 255); text-decoration:underline;">{{ item.name }}</a>
+                  <span style="{{ item.modeBadgeStyle }}">{{ item.modeLabel }}</span>
+                  <sc-if value="{{ item.timeoutBadgeVisible }}" hint-placeholder-val="{{ false }}">
+                    <span style="padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; background:oklch(0.78 0.15 25 / 0.18); color:oklch(0.78 0.15 25); white-space:nowrap;">凸死あり</span>
+                  </sc-if>
+                </div>
+                <span style="font-size:13px; color:oklch(0.46 0.02 255); white-space:nowrap;">{{ item.dateLabel }}</span>
+              </div>
+
+              <sc-if value="{{ item.hasMatched }}" hint-placeholder-val="{{ false }}">
+                <div style="{{ item.matchPanelStyle }}">
+                  <span style="{{ item.matchLabelStyle }}">一致したプレイヤー</span>
+                  <sc-for list="{{ item.matchedPlayers }}" as="mp" hint-placeholder-count="1">
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; font-size:14px;">
+                      <span style="font-weight:700; font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ mp.label }}</span>
+                      <span style="color:oklch(0.66 0.02 255);">{{ mp.roleLabel }} ・ {{ mp.factionLabel }}</span>
+                      <span style="{{ mp.resultStyle }}">{{ mp.resultLabel }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+                <span style="font-size:13px; color:oklch(0.66 0.02 255);">{{ item.metaLine }}</span>
+                <a href="{{ item.logUrl }}" target="_blank" rel="noopener" style="font-size:13px; font-weight:600; color:oklch(0.93 0.008 255); border:1px solid oklch(0.32 0.02 255); padding:7px 14px; border-radius:8px;" style-hover="border-color:oklch(0.6 0.02 255);">ログを見る →</a>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ showPagination }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex; justify-content:center; align-items:center; gap:10px; margin-top:24px; flex-wrap:wrap;">
+            <button onClick="{{ goFirstPage }}" disabled="{{ disablePrevPage }}" style="{{ prevPageStyle }}">« 先頭</button>
+            <button onClick="{{ goPrevPage }}" disabled="{{ disablePrevPage }}" style="{{ prevPageStyle }}">← 前へ</button>
+            <span style="font-size:13px; color:oklch(0.66 0.02 255); white-space:nowrap;">{{ pageLabel }}</span>
+            <button onClick="{{ goNextPage }}" disabled="{{ disableNextPage }}" style="{{ nextPageStyle }}">次へ →</button>
+            <button onClick="{{ goLastPage }}" disabled="{{ disableNextPage }}" style="{{ nextPageStyle }}">最後 »</button>
+          </div>
+        </sc-if>
+      </sc-if>
+
+      <sc-if value="{{ notLoaded }}" hint-placeholder-val="{{ true }}">
+        <div style="text-align:center; padding:48px; color:oklch(0.46 0.02 255); font-size:14px;">読み込み中…</div>
+      </sc-if>
+    </div>
+
+    <div style="text-align:center; margin-top:56px; font-size:12px; color:oklch(0.42 0.02 255); line-height:1.7;">これはファンによる非公式のプロトタイプです。ベースはサンプルログですが、上で検索を実行すると有志運営の検索API(zinrostats)から実データを取得しこの一覧に自動で追加されます（前回分は入れ替わります）。</div>
+
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;accentColor&quot;: {&quot;editor&quot;: &quot;color&quot;, &quot;default&quot;: &quot;#E3B34F&quot;, &quot;options&quot;: [&quot;#E3B34F&quot;, &quot;#E2836F&quot;, &quot;#5FB3AE&quot;, &quot;#9E8FE0&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;見た目&quot;},
+  &quot;advancedFiltersDefaultOpen&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;動作&quot;},
+  &quot;resultDensity&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;comfortable&quot;, &quot;options&quot;: [&quot;comfortable&quot;, &quot;compact&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;動作&quot;}
+}">
+const MODES = ['通常', 'ワンナイト', 'ワードウルフ'];
+const FACTIONS = ['村人陣営', '人狼陣営', '妖狐陣営', '多数派陣営', '少数派陣営'];
+const ROLES = ['村人', '占い師', '霊媒師', '狩人', '共有者', '猫又', 'パン屋', '役人', '人狼', '狂人', '妖狐', '背徳者', '多数派', '少数派'];
+const ROLE_FACTION = {
+  村人: '村人陣営', 占い師: '村人陣営', 霊媒師: '村人陣営', 狩人: '村人陣営', 共有者: '村人陣営', 猫又: '村人陣営', パン屋: '村人陣営', 役人: '村人陣営',
+  人狼: '人狼陣営', 狂人: '人狼陣営',
+  妖狐: '妖狐陣営', 背徳者: '妖狐陣営',
+  多数派: '多数派陣営', 少数派: '少数派陣営',
+};
+
+const PAGE_SIZE = 20;
+
+const DENSITY = {
+  comfortable: { padding: '20px 22px', innerGap: '12px', listGap: '14px' },
+  compact: { padding: '14px 16px', innerGap: '8px', listGap: '8px' },
+};
+
+function hexToRgb(hex) {
+  const h = (hex || '#E3B34F').replace('#', '');
+  const n = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  const num = parseInt(n, 16);
+  return [(num >> 16) & 255, (num >> 8) & 255, num & 255];
+}
+function rgba(hex, a) {
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+class Component extends DCLogic {
+  state = {
+    loaded: false,
+    logs: [],
+    name: '',
+    trip: '',
+    matchMode: 'or',
+    villageQuery: '',
+    modes: new Set(),
+    factions: new Set(),
+    roles: new Set(),
+    outcomes: new Set(),
+    excludeTimeout: false,
+    dateFrom: '',
+    dateTo: '',
+    minPlayers: '',
+    maxPlayers: '',
+    minMessages: '',
+    maxMessages: '',
+    sortField: 'date',
+    sortDir: 'desc',
+    advancedOpen: false,
+    page: 1,
+    apiIncludeOneNight: true,
+    apiIncludeWordWolf: true,
+    apiLoading: false,
+    apiSearched: false,
+    apiError: '',
+    apiResultCount: 0,
+    importedLogs: [],
+  };
+
+  componentDidMount() {
+    if (this.props.advancedFiltersDefaultOpen) this.setState({ advancedOpen: true });
+    this.setState({ logs: window.WEREWOLF_SAMPLE_LOGS || [], loaded: true });
+    try {
+      const saved = localStorage.getItem('zinro-log-import-v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) this.setState({ importedLogs: parsed });
+      }
+    } catch (e) {}
+  }
+
+  accent() { return this.props.accentColor || '#E3B34F'; }
+  density() { return DENSITY[this.props.resultDensity] || DENSITY.comfortable; }
+
+  chip(active) {
+    const accent = this.accent();
+    return active
+      ? { padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: '1px solid ' + accent, background: rgba(accent, 0.16), color: accent, cursor: 'pointer' }
+      : { padding: '6px 14px', borderRadius: 999, fontSize: 13, fontWeight: 600, border: '1px solid oklch(0.32 0.02 255)', background: 'transparent', color: 'oklch(0.66 0.02 255)', cursor: 'pointer' };
+  }
+
+  pageButtonStyle(enabled) {
+    return enabled
+      ? { border: '1px solid oklch(0.32 0.02 255)', color: 'oklch(0.93 0.008 255)', fontSize: 14, fontWeight: 600, padding: '10px 20px', borderRadius: 999, cursor: 'pointer', background: 'transparent' }
+      : { border: '1px solid oklch(0.24 0.02 255)', color: 'oklch(0.38 0.02 255)', fontSize: 14, fontWeight: 600, padding: '10px 20px', borderRadius: 999, cursor: 'default', background: 'transparent' };
+  }
+
+  parseList(str) { return str.split(/[,、]/).map((s) => s.trim()).filter(Boolean); }
+
+  playerMatches(p, names, trips) {
+    const nameHit = names.length ? names.includes(p.name) : null;
+    const tripHit = trips.length ? trips.includes(p.trip) : null;
+    if (names.length && trips.length) return this.state.matchMode === 'and' ? (nameHit && tripHit) : (nameHit || tripHit);
+    if (names.length) return nameHit;
+    return tripHit;
+  }
+
+  matchesNameTrip(v, names, trips) {
+    if (!names.length && !trips.length) return true;
+    return v.players.some((p) => this.playerMatches(p, names, trips));
+  }
+
+  getMatchedPlayers(v, names, trips) {
+    if (!names.length && !trips.length) return [];
+    return v.players.filter((p) => this.playerMatches(p, names, trips));
+  }
+
+  getMatchStats(list, names, trips) {
+    let win = 0, lose = 0, unknown = 0;
+    list.forEach((v) => {
+      this.getMatchedPlayers(v, names, trips).forEach((p) => {
+        if (p.result === 'win') win++;
+        else if (p.result === 'lose') lose++;
+        else unknown++;
+      });
+    });
+    return { win, lose, unknown };
+  }
+
+  passesFilters(v, names, trips) {
+    const s = this.state;
+    if (!this.matchesNameTrip(v, names, trips)) return false;
+    if (s.villageQuery.trim() && !v.name.includes(s.villageQuery.trim())) return false;
+    if (s.modes.size && !s.modes.has(v.mode)) return false;
+    if (s.excludeTimeout && v.hadTimeoutDeath) return false;
+    if (s.factions.size && !v.players.some((p) => s.factions.has(p.faction))) return false;
+    if (s.roles.size && !v.players.some((p) => s.roles.has(p.role))) return false;
+    if (s.outcomes.size && !s.outcomes.has(v.outcome)) return false;
+    if (s.dateFrom && v.date < s.dateFrom) return false;
+    if (s.dateTo && v.date > s.dateTo) return false;
+    if (s.minPlayers && v.totalPlayers < Number(s.minPlayers)) return false;
+    if (s.maxPlayers && v.totalPlayers > Number(s.maxPlayers)) return false;
+    if (s.minMessages && v.messageCount < Number(s.minMessages)) return false;
+    if (s.maxMessages && v.messageCount > Number(s.maxMessages)) return false;
+    return true;
+  }
+
+  getFiltered() {
+    const names = this.parseList(this.state.name);
+    const trips = this.parseList(this.state.trip);
+    const list = this.state.logs.concat(this.state.importedLogs).filter((v) => this.passesFilters(v, names, trips));
+    const dir = this.state.sortDir === 'asc' ? 1 : -1;
+    const sorters = {
+      date: (a, b) => a.date.localeCompare(b.date) * dir,
+      messages: (a, b) => (a.messageCount - b.messageCount) * dir,
+      name: (a, b) => a.name.localeCompare(b.name, 'ja') * dir,
+    };
+    return list.slice().sort(sorters[this.state.sortField] || sorters.date);
+  }
+
+  toggleSetItem(key, value) {
+    this.setState((s) => {
+      const next = new Set(s[key]);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return { [key]: next, page: 1 };
+    });
+  }
+
+  buildApiUrl() {
+    const names = this.parseList(this.state.name);
+    const trips = this.parseList(this.state.trip);
+    const params = new URLSearchParams();
+    if (names.length) params.set('name', names.join('\\'));
+    if (trips.length) params.set('trip', trips.join('\\'));
+    if (this.state.villageQuery.trim()) params.set('room_name', this.state.villageQuery.trim());
+    if (this.state.dateFrom) params.set('s_date', this.state.dateFrom + ' 00:00:00');
+    if (this.state.dateTo) params.set('e_date', this.state.dateTo + ' 23:59:59');
+    if (this.state.excludeTimeout) params.set('totsushi', '0');
+    if (!this.state.apiIncludeOneNight) params.set('one_night', '0');
+    if (!this.state.apiIncludeWordWolf) params.set('word_wolf', '0');
+    const qs = params.toString();
+    return 'https://ss1.xrea.com/zinrostats.s205.xrea.com/log_search' + (qs ? '?' + qs : '');
+  }
+
+  parseApiLog(entry) {
+    const mode = entry.one_night ? 'ワンナイト' : entry.word_wolf ? 'ワードウルフ' : '通常';
+    const players = (entry.players || [])
+      .filter((p) => p.job !== '観戦者')
+      .map((p) => {
+        const faction = ROLE_FACTION[p.job] || '不明';
+        return {
+          name: p.name,
+          trip: (p.trip || '').replace(/^[◆◇]/, ''),
+          role: p.job || '不明',
+          faction,
+          result: (faction === '不明' || !entry.winner) ? undefined : (faction === entry.winner ? 'win' : 'lose'),
+          mes: Number(p.mes) || 0,
+        };
+      });
+    const dateOnly = (entry.date || '').slice(0, 10).replace(/\//g, '-');
+    return {
+      id: 'api-' + entry.id,
+      sourceId: entry.id,
+      name: entry.room_name || `村ログ #${entry.id}`,
+      mode,
+      date: dateOnly || new Date().toISOString().slice(0, 10),
+      dateLabel: entry.date || '',
+      logUrl: `https://zinro.net/m/log.php?id=${entry.id}`,
+      messageCount: players.reduce((sum, p) => sum + p.mes, 0),
+      totalPlayers: players.length,
+      outcome: entry.winner ? `${entry.winner}勝利` : '不明',
+      hadTimeoutDeath: !!entry.totsushi,
+      players,
+    };
+  }
+
+  persistImported(list) {
+    try { localStorage.setItem('zinro-log-import-v1', JSON.stringify(list)); } catch (e) {}
+  }
+
+  clearImported() {
+    this.setState({ importedLogs: [] });
+    this.persistImported([]);
+  }
+
+  async runApiSearch() {
+    const url = this.buildApiUrl();
+    this.setState({ apiLoading: true, apiSearched: true, apiError: '', apiResultCount: 0 });
+    try {
+      const res = await fetch(url);
+      const json = await res.json();
+      if (json.error) {
+        this.setState({ apiLoading: false, apiError: json.error });
+        return;
+      }
+      const parsed = (json.log_data || []).map((e) => this.parseApiLog(e));
+      this.persistImported(parsed);
+      this.setState({ apiLoading: false, apiResultCount: parsed.length, importedLogs: parsed, page: 1 });
+    } catch (e) {
+      this.setState({ apiLoading: false, apiError: 'blocked' });
+    }
+  }
+
+  toResultView(v) {
+    const names = this.parseList(this.state.name);
+    const trips = this.parseList(this.state.trip);
+    const matched = this.getMatchedPlayers(v, names, trips);
+    const accent = this.accent();
+    const den = this.density();
+    const modeBadge = {
+      '通常': { background: 'oklch(0.30 0.02 255)', color: 'oklch(0.93 0.008 255)' },
+      'ワンナイト': { background: accent, color: 'oklch(0.16 0.02 255)' },
+      'ワードウルフ': { background: 'oklch(0.78 0.15 25 / 0.18)', color: 'oklch(0.78 0.15 25)' },
+    }[v.mode] || { background: 'oklch(0.30 0.02 255)', color: 'oklch(0.93 0.008 255)' };
+    return {
+      id: v.id,
+      name: v.name,
+      logUrl: v.logUrl,
+      dateLabel: v.dateLabel,
+      modeLabel: v.mode,
+      modeBadgeStyle: Object.assign({ padding: '3px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap' }, modeBadge),
+      timeoutBadgeVisible: v.hadTimeoutDeath,
+      hasMatched: matched.length > 0,
+      matchPanelStyle: { background: rgba(accent, 0.08), border: '1px solid ' + rgba(accent, 0.3), borderRadius: 10, padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 8 },
+      matchLabelStyle: { fontSize: 11, fontWeight: 700, letterSpacing: '0.06em', color: accent, textTransform: 'uppercase' },
+      matchedPlayers: matched.map((p) => ({
+        key: p.name + p.trip,
+        label: p.trip ? `${p.name}（${p.trip}）` : p.name,
+        roleLabel: p.role,
+        factionLabel: p.faction,
+        resultLabel: p.result === 'win' ? '勝利' : p.result === 'lose' ? '敗北' : '不明',
+        resultStyle: p.result === 'win' ? { color: accent, fontWeight: 700 } : p.result === 'lose' ? { color: 'oklch(0.66 0.02 255)', fontWeight: 700 } : { color: 'oklch(0.46 0.02 255)', fontWeight: 700 },
+      })),
+      metaLine: v.totalPlayers > 0
+        ? `${v.totalPlayers}人参加 ・ ${v.messageCount.toLocaleString('ja-JP')}件の発言 ・ ${v.outcome}`
+        : '自動解析できませんでした（ログを直接開いて確認してください）',
+      cardStyle: { background: 'oklch(0.19 0.02 255)', border: '1px solid oklch(0.27 0.02 255)', borderRadius: 14, padding: den.padding, display: 'flex', flexDirection: 'column', gap: den.innerGap },
+    };
+  }
+
+  renderVals() {
+    const filtered = this.getFiltered();
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const currentPage = Math.min(this.state.page, totalPages);
+    const pageStart = (currentPage - 1) * PAGE_SIZE;
+    const visible = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+    const rangeStart = filtered.length === 0 ? 0 : pageStart + 1;
+    const rangeEnd = pageStart + visible.length;
+    const accent = this.accent();
+    const bump = (extra) => Object.assign({ page: 1 }, extra);
+
+    const names = this.parseList(this.state.name);
+    const trips = this.parseList(this.state.trip);
+    const hasQuery = names.length > 0 || trips.length > 0;
+    const matchStats = hasQuery ? this.getMatchStats(filtered, names, trips) : null;
+    const matchedTotal = matchStats ? matchStats.win + matchStats.lose + matchStats.unknown : 0;
+    const decided = matchStats ? matchStats.win + matchStats.lose : 0;
+    const winRatePct = decided ? (matchStats.win / decided * 100).toFixed(1) : null;
+
+    return {
+      eyebrowColor: accent,
+      loaded: this.state.loaded,
+      notLoaded: !this.state.loaded,
+      totalCount: this.state.logs.length,
+      filteredCount: filtered.length,
+      rangeStart,
+      rangeEnd,
+      pageLabel: `${currentPage} / ${totalPages} ページ`,
+      showPagination: totalPages > 1,
+      disablePrevPage: currentPage <= 1,
+      disableNextPage: currentPage >= totalPages,
+      prevPageStyle: this.pageButtonStyle(currentPage > 1),
+      nextPageStyle: this.pageButtonStyle(currentPage < totalPages),
+      goPrevPage: () => this.setState((s) => ({ page: Math.max(1, Math.min(s.page, totalPages) - 1) })),
+      goNextPage: () => this.setState((s) => ({ page: Math.min(totalPages, Math.min(s.page, totalPages) + 1) })),
+      goFirstPage: () => this.setState({ page: 1 }),
+      goLastPage: () => this.setState({ page: totalPages }),
+      noResults: this.state.loaded && filtered.length === 0,
+
+      hasMatchStats: hasQuery && matchedTotal > 0,
+      matchTotalLabel: winRatePct !== null ? `勝率 ${winRatePct}%` : '勝敗データなし',
+      matchBreakdownLabel: matchStats
+        ? `(${matchStats.win}勝 ${matchStats.lose}敗${matchStats.unknown ? ' ・ 不明' + matchStats.unknown + '件' : ''})`
+        : '',
+
+      name: this.state.name,
+      onNameChange: (e) => this.setState({ name: e.target.value, page: 1 }),
+      trip: this.state.trip,
+      onTripChange: (e) => this.setState({ trip: e.target.value, page: 1 }),
+
+      matchOrStyle: this.chip(this.state.matchMode === 'or'),
+      matchAndStyle: this.chip(this.state.matchMode === 'and'),
+      setMatchOr: () => this.setState({ matchMode: 'or' }),
+      setMatchAnd: () => this.setState({ matchMode: 'and' }),
+
+      advancedOpen: this.state.advancedOpen,
+      toggleAdvanced: () => this.setState((s) => ({ advancedOpen: !s.advancedOpen })),
+      advancedLabel: this.state.advancedOpen ? '詳細フィルターを閉じる  ▲' : '詳細フィルターを表示  ▾',
+
+      villageQuery: this.state.villageQuery,
+      onVillageQueryChange: (e) => this.setState({ villageQuery: e.target.value, page: 1 }),
+
+      modeOptions: MODES.map((m) => ({ key: m, label: m, style: this.chip(this.state.modes.has(m)), toggle: () => this.toggleSetItem('modes', m) })),
+      factionOptions: FACTIONS.map((f) => ({ key: f, label: f, style: this.chip(this.state.factions.has(f)), toggle: () => this.toggleSetItem('factions', f) })),
+      roleOptions: ROLES.map((r) => ({ key: r, label: r, style: this.chip(this.state.roles.has(r)), toggle: () => this.toggleSetItem('roles', r) })),
+      outcomeOptions: FACTIONS.map((f) => ({ key: f + '勝利', label: f + '勝利', style: this.chip(this.state.outcomes.has(f + '勝利')), toggle: () => this.toggleSetItem('outcomes', f + '勝利') })),
+
+      excludeTimeout: this.state.excludeTimeout,
+      excludeTimeoutStyle: this.chip(this.state.excludeTimeout),
+      toggleExcludeTimeout: () => this.setState((s) => (bump({ excludeTimeout: !s.excludeTimeout }))),
+
+      dateFrom: this.state.dateFrom, onDateFromChange: (e) => this.setState({ dateFrom: e.target.value, page: 1 }),
+      dateTo: this.state.dateTo, onDateToChange: (e) => this.setState({ dateTo: e.target.value, page: 1 }),
+      minPlayers: this.state.minPlayers, onMinPlayersChange: (e) => this.setState({ minPlayers: e.target.value, page: 1 }),
+      maxPlayers: this.state.maxPlayers, onMaxPlayersChange: (e) => this.setState({ maxPlayers: e.target.value, page: 1 }),
+      minMessages: this.state.minMessages, onMinMessagesChange: (e) => this.setState({ minMessages: e.target.value, page: 1 }),
+      maxMessages: this.state.maxMessages, onMaxMessagesChange: (e) => this.setState({ maxMessages: e.target.value, page: 1 }),
+
+      sortField: this.state.sortField,
+      onSortFieldChange: (e) => this.setState({ sortField: e.target.value, page: 1 }),
+      sortDir: this.state.sortDir,
+      sortDirLabel: this.state.sortDir === 'asc' ? '▲ 昇順' : '▼ 降順',
+      toggleSortDir: () => this.setState((s) => ({ sortDir: s.sortDir === 'asc' ? 'desc' : 'asc', page: 1 })),
+
+      resetFilters: () => this.setState({
+        name: '', trip: '', matchMode: 'or', villageQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
+        excludeTimeout: false, dateFrom: '', dateTo: '', minPlayers: '', maxPlayers: '', minMessages: '', maxMessages: '', sortField: 'date', sortDir: 'desc', page: 1,
+      }),
+
+      listContainerStyle: { display: 'flex', flexDirection: 'column', gap: this.density().listGap },
+      resultsView: visible.map((v) => this.toResultView(v)),
+
+      apiIncludeOneNight: this.state.apiIncludeOneNight,
+      onToggleIncludeOneNight: (e) => this.setState({ apiIncludeOneNight: e.target.checked }),
+      apiIncludeWordWolf: this.state.apiIncludeWordWolf,
+      onToggleIncludeWordWolf: (e) => this.setState({ apiIncludeWordWolf: e.target.checked }),
+      apiLoading: this.state.apiLoading,
+      apiSearched: this.state.apiSearched,
+      apiSearchButtonLabel: this.state.apiLoading ? '検索中…' : 'APIで検索',
+      apiSearchButtonStyle: this.state.apiLoading
+        ? { padding: '10px 22px', borderRadius: 8, fontSize: 14, fontWeight: 700, background: 'oklch(0.32 0.02 255)', color: 'oklch(0.6 0.02 255)', border: 'none', cursor: 'default' }
+        : { padding: '10px 22px', borderRadius: 8, fontSize: 14, fontWeight: 700, background: accent, color: 'oklch(0.14 0.02 255)', border: 'none', cursor: 'pointer' },
+      runApiSearchHandler: () => this.runApiSearch(),
+      apiRequestUrl: this.buildApiUrl(),
+      apiHasError: !!this.state.apiError,
+      apiErrorMessage: this.state.apiError === 'blocked'
+        ? 'ブラウザのCORS制限でブロックされた可能性があります(fetchが失敗しました)。'
+        : `検索APIがエラーを返しました: ${this.state.apiError}`,
+      apiHasResult: this.state.apiSearched && !this.state.apiLoading && !this.state.apiError,
+      apiResultMessage: `取得成功: ${this.state.apiResultCount} 件(一覧に追加済み)`,
+      hasImportedLogs: this.state.importedLogs.length > 0,
+      importedCount: this.state.importedLogs.length,
+      clearImported: () => this.clearImported(),
+    };
+  }
+}
+</script>
+</body>
+</html>
