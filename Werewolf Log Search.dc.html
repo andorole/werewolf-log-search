@@ -444,16 +444,22 @@ class Component extends DCLogic {
 
   parseApiLog(entry) {
     const mode = entry.one_night ? 'ワンナイト' : entry.word_wolf ? 'ワードウルフ' : '通常';
+    // The API's `winner` field uses bare faction/role names without the "陣営" suffix
+    // (e.g. "村人", "人狼", sometimes compound like "恋人と人狼"), unlike our own
+    // faction labels which always end in "陣営". Normalize both sides before comparing.
+    const winnerTokens = (entry.winner || '').split(/[と・、,]/).map((s) => s.trim()).filter(Boolean);
+    const normalizedWinnerTokens = winnerTokens.map((t) => (FACTIONS.includes(t + '陣営') ? t + '陣営' : t));
     const players = (entry.players || [])
       .filter((p) => p.job !== '観戦者')
       .map((p) => {
         const faction = ROLE_FACTION[p.job] || '不明';
+        const factionBare = faction.replace(/陣営$/, '');
         return {
           name: p.name,
           trip: (p.trip || '').replace(/^[◆◇]/, ''),
           role: p.job || '不明',
           faction,
-          result: (faction === '不明' || !entry.winner) ? undefined : (faction === entry.winner ? 'win' : 'lose'),
+          result: (faction === '不明' || !entry.winner) ? undefined : (winnerTokens.includes(factionBare) ? 'win' : 'lose'),
           mes: Number(p.mes) || 0,
         };
       });
@@ -468,7 +474,7 @@ class Component extends DCLogic {
       logUrl: `https://zinro.net/m/log.php?id=${entry.id}`,
       messageCount: players.reduce((sum, p) => sum + p.mes, 0),
       totalPlayers: players.length,
-      outcome: entry.winner ? `${entry.winner}勝利` : '不明',
+      outcome: entry.winner ? `${normalizedWinnerTokens.join('と')}勝利` : '不明',
       hadTimeoutDeath: !!entry.totsushi,
       players,
     };
