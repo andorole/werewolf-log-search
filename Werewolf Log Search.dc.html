@@ -189,6 +189,48 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
       </div>
     </div>
 
+    <div style="margin-top:20px; background:oklch(0.19 0.02 255); border:1px solid oklch(0.27 0.02 255); border-radius:14px; padding:20px 24px;">
+      <div style="font-size:14px; font-weight:700; margin-bottom:6px;">荒らし傾向レポート（実験的）</div>
+      <div style="font-size:12px; color:oklch(0.56 0.02 255); line-height:1.7; margin-bottom:14px;">現在の条件（{{ trollReportQueryLabel }}）でGitHub Actionsを手動実行すると、追放回数・スパム投稿・記号荒らしを集計します。実行してから反映まで1〜2分ほどかかります。</div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <a href="{{ trollReportRunUrl }}" target="_blank" rel="noopener" style="font-size:13px; font-weight:600; color:oklch(0.93 0.008 255); border:1px solid oklch(0.32 0.02 255); padding:9px 16px; border-radius:8px;" style-hover="border-color:oklch(0.6 0.02 255);">GitHubで実行 →</a>
+        <button onClick="{{ fetchTrollReportHandler }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.93 0.008 255); font-size:13px; font-weight:600; padding:9px 16px; border-radius:8px; cursor:pointer;">{{ trollReportButtonLabel }}</button>
+      </div>
+
+      <sc-if value="{{ trollReportNotFound }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:14px; font-size:13px; color:oklch(0.56 0.02 255);">まだレポートが見つかりません。GitHubで実行してから少し待って、もう一度「結果を確認」を押してください。</div>
+      </sc-if>
+
+      <sc-if value="{{ trollReportFetchError }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:14px; font-size:13px; color:oklch(0.78 0.15 25);">レポートの取得に失敗しました。少し時間を置いて再度お試しください。</div>
+      </sc-if>
+
+      <sc-if value="{{ trollReportReady }}" hint-placeholder-val="{{ false }}">
+        <div style="margin-top:16px; padding-top:16px; border-top:1px solid oklch(0.28 0.02 255);">
+          <sc-if value="{{ trollReportMismatch }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px; color:oklch(0.78 0.15 75); margin-bottom:10px;">※ この結果は今の検索条件とは違う条件（{{ trollReportSourceQueryLabel }}）で{{ trollReportGeneratedLabel }}に生成されたものです。</div>
+          </sc-if>
+          <sc-if value="{{ trollReportMatches }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:12px; color:oklch(0.56 0.02 255); margin-bottom:10px;">{{ trollReportGeneratedLabel }} 生成</div>
+          </sc-if>
+
+          <sc-if value="{{ trollReportHasRows }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <sc-for list="{{ trollReportRows }}" as="row" hint-placeholder-count="3">
+                <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid oklch(0.24 0.02 255); font-size:13px;">
+                  <span style="font-weight:700; font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ row.name }}</span>
+                  <span style="color:oklch(0.66 0.02 255);">{{ row.games }}戦 ・ 追放{{ row.kicked }}回({{ row.kickRateLabel }}) ・ スパム{{ row.spam }} ・ 記号{{ row.noisy }} ・ 荒らし関連発言{{ row.keyword }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ trollReportEmptyRows }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:13px; color:oklch(0.56 0.02 255);">該当するプレイヤーは見つかりませんでした。</div>
+          </sc-if>
+        </div>
+      </sc-if>
+    </div>
+
     <div style="margin-top:32px;">
       <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
         <div style="font-size:14px; color:oklch(0.66 0.02 255); margin-bottom:16px;">{{ filteredCount }} 件中 {{ rangeStart }}〜{{ rangeEnd }} 件目を表示</div>
@@ -325,6 +367,11 @@ class Component extends DCLogic {
     apiError: '',
     apiResultCount: 0,
     importedLogs: [],
+    // Isolated namespace for the "troll report" feature (see scripts/troll-report.js +
+    // .github/workflows/troll-report.yml). Kept self-contained on purpose: it only
+    // reads its own report file and never touches other state, so if this feature
+    // breaks it can't take the rest of the page down with it.
+    trollReport: { status: 'idle', data: null, error: '' }, // status: idle | loading | ready | not_found | error
   };
 
   componentDidMount() {
@@ -507,6 +554,63 @@ class Component extends DCLogic {
     }
   }
 
+  // --- Troll report (isolated feature, see state.trollReport) ---
+  // Runs out-of-band via GitHub Actions (scripts/troll-report.js +
+  // .github/workflows/troll-report.yml). This page never triggers that
+  // workflow itself (would require embedding a credential in a public page);
+  // it only offers a link to run it manually and reads back the resulting
+  // static JSON, same-origin, once it exists.
+  trollReportRunUrl() {
+    return 'https://github.com/andorole/werewolf-log-search/actions/workflows/troll-report.yml';
+  }
+
+  trollReportQuery() {
+    return {
+      name: this.state.name.trim(),
+      trip: this.state.trip.trim(),
+      room: this.state.villageQuery.trim(),
+      sdate: this.state.dateFrom,
+      edate: this.state.dateTo,
+    };
+  }
+
+  trollReportQueryMatchesCurrent(reportQuery) {
+    if (!reportQuery) return false;
+    const current = this.trollReportQuery();
+    return ['name', 'trip', 'room', 'sdate', 'edate'].every((k) => (current[k] || '') === (reportQuery[k] || ''));
+  }
+
+  formatTrollQueryLabel(q) {
+    if (!q) return '';
+    const parts = [];
+    if (q.name) parts.push(`名前=${q.name}`);
+    if (q.trip) parts.push(`トリップ=${q.trip}`);
+    if (q.room) parts.push(`村名=${q.room}`);
+    if (q.sdate) parts.push(`開始日=${q.sdate}`);
+    if (q.edate) parts.push(`終了日=${q.edate}`);
+    return parts.length ? parts.join(' / ') : '(条件なし)';
+  }
+
+  async fetchTrollReport() {
+    this.setState({ trollReport: { status: 'loading', data: null, error: '' } });
+    try {
+      const res = await fetch('./reports/latest.json', { cache: 'no-store' });
+      if (res.status === 404) {
+        this.setState({ trollReport: { status: 'not_found', data: null, error: '' } });
+        return;
+      }
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      if (!data || data.version !== 1 || !Array.isArray(data.players)) {
+        this.setState({ trollReport: { status: 'error', data: null, error: 'unsupported_format' } });
+        return;
+      }
+      this.setState({ trollReport: { status: 'ready', data, error: '' } });
+    } catch (e) {
+      this.setState({ trollReport: { status: 'error', data: null, error: 'fetch_failed' } });
+    }
+  }
+
   toResultView(v) {
     const names = this.parseList(this.state.name);
     const trips = this.parseList(this.state.trip);
@@ -657,6 +761,39 @@ class Component extends DCLogic {
       hasImportedLogs: this.state.importedLogs.length > 0,
       importedCount: this.state.importedLogs.length,
       clearImported: () => this.clearImported(),
+
+      // --- Troll report (isolated; see trollReport state + methods above) ---
+      trollReportRunUrl: this.trollReportRunUrl(),
+      trollReportQueryLabel: this.formatTrollQueryLabel(this.trollReportQuery()),
+      fetchTrollReportHandler: () => this.fetchTrollReport(),
+      trollReportButtonLabel: this.state.trollReport.status === 'loading' ? '確認中…' : '結果を確認',
+      trollReportNotFound: this.state.trollReport.status === 'not_found',
+      trollReportFetchError: this.state.trollReport.status === 'error',
+      trollReportReady: this.state.trollReport.status === 'ready',
+      trollReportMatches:
+        this.state.trollReport.status === 'ready' &&
+        this.trollReportQueryMatchesCurrent(this.state.trollReport.data && this.state.trollReport.data.query),
+      trollReportMismatch:
+        this.state.trollReport.status === 'ready' &&
+        !this.trollReportQueryMatchesCurrent(this.state.trollReport.data && this.state.trollReport.data.query),
+      trollReportGeneratedLabel: this.state.trollReport.data
+        ? new Date(this.state.trollReport.data.generatedAt).toLocaleString('ja-JP')
+        : '',
+      trollReportSourceQueryLabel: this.formatTrollQueryLabel(this.state.trollReport.data && this.state.trollReport.data.query),
+      trollReportRows: this.state.trollReport.data
+        ? this.state.trollReport.data.players.map((p) => ({
+            key: p.name,
+            name: p.name,
+            games: p.games,
+            kicked: p.kicked,
+            kickRateLabel: p.kickRate + '%',
+            spam: p.spam,
+            noisy: p.noisy,
+            keyword: p.keyword,
+          }))
+        : [],
+      trollReportHasRows: !!(this.state.trollReport.data && this.state.trollReport.data.players.length > 0),
+      trollReportEmptyRows: !!(this.state.trollReport.data && this.state.trollReport.data.players.length === 0),
     };
   }
 }

@@ -1,0 +1,79 @@
+name: Troll Report
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "プレイヤー名（完全一致・省略可）"
+        required: false
+        type: string
+      trip:
+        description: "トリップ（完全一致・省略可）"
+        required: false
+        type: string
+      room:
+        description: "村名（部分一致・省略可）"
+        required: false
+        type: string
+      sdate:
+        description: "開始日 YYYY-MM-DD（省略可）"
+        required: false
+        type: string
+      edate:
+        description: "終了日 YYYY-MM-DD（省略可）"
+        required: false
+        type: string
+      limit:
+        description: "解析するログ件数の上限"
+        required: false
+        type: string
+        default: "300"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: troll-report
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Run troll report
+        env:
+          IN_NAME: ${{ inputs.name }}
+          IN_TRIP: ${{ inputs.trip }}
+          IN_ROOM: ${{ inputs.room }}
+          IN_SDATE: ${{ inputs.sdate }}
+          IN_EDATE: ${{ inputs.edate }}
+          IN_LIMIT: ${{ inputs.limit }}
+        run: |
+          set -e
+          ARGS=()
+          [ -n "$IN_NAME" ] && ARGS+=(--name "$IN_NAME")
+          [ -n "$IN_TRIP" ] && ARGS+=(--trip "$IN_TRIP")
+          [ -n "$IN_ROOM" ] && ARGS+=(--room "$IN_ROOM")
+          [ -n "$IN_SDATE" ] && ARGS+=(--sdate "$IN_SDATE")
+          [ -n "$IN_EDATE" ] && ARGS+=(--edate "$IN_EDATE")
+          [ -n "$IN_LIMIT" ] && ARGS+=(--limit "$IN_LIMIT")
+          node scripts/troll-report.js "${ARGS[@]}" --json reports/latest.json
+
+      - name: Commit report
+        run: |
+          set -e
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add reports/latest.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Update troll report"
+            git push
+          fi
