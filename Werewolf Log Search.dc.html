@@ -142,6 +142,10 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
               <input type="text" value="{{ villageQuery }}" onChange="{{ onVillageQueryChange }}" placeholder="村名で検索" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
             </div>
             <div>
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">配役（部分一致・実データのみ）</label>
+              <input type="text" value="{{ jobsetQuery }}" onChange="{{ onJobsetQueryChange }}" placeholder="例: 猫又 / 人狼-3" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+            </div>
+            <div>
               <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">凸死ログ</label>
               <button onClick="{{ toggleExcludeTimeout }}" style="{{ excludeTimeoutStyle }}">凸死ログを除外する</button>
             </div>
@@ -236,10 +240,22 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
         <div style="font-size:14px; color:oklch(0.66 0.02 255); margin-bottom:16px;">{{ filteredCount }} 件中 {{ rangeStart }}〜{{ rangeEnd }} 件目を表示</div>
 
         <sc-if value="{{ hasMatchStats }}" hint-placeholder-val="{{ false }}">
-          <div style="display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:16px; padding:10px 16px; border:1px solid oklch(0.30 0.02 255); border-radius:10px; font-size:13px; color:oklch(0.85 0.008 255); background:oklch(0.19 0.02 255);">
-            <span style="font-weight:700;">一致した対戦成績</span>
-            <span>{{ matchTotalLabel }}</span>
-            <span style="color:oklch(0.66 0.02 255);">{{ matchBreakdownLabel }}</span>
+          <div style="margin-bottom:16px; padding:10px 16px; border:1px solid oklch(0.30 0.02 255); border-radius:10px; font-size:13px; color:oklch(0.85 0.008 255); background:oklch(0.19 0.02 255);">
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span style="font-weight:700;">一致した対戦成績</span>
+              <span>{{ matchTotalLabel }}</span>
+              <span style="color:oklch(0.66 0.02 255);">{{ matchBreakdownLabel }}</span>
+            </div>
+            <sc-if value="{{ hasMatchFactionRows }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex; flex-direction:column; gap:4px; margin-top:8px; padding-top:8px; border-top:1px solid oklch(0.28 0.02 255);">
+                <sc-for list="{{ matchFactionRows }}" as="fr" hint-placeholder-count="2">
+                  <div style="display:flex; justify-content:space-between; gap:12px; font-size:12px; color:oklch(0.66 0.02 255);">
+                    <span>{{ fr.factionLabel }}として（{{ fr.games }}戦）</span>
+                    <span>{{ fr.winRateLabel }}（{{ fr.breakdownLabel }}）</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
           </div>
         </sc-if>
 
@@ -278,6 +294,10 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
                 <span style="font-size:13px; color:oklch(0.66 0.02 255);">{{ item.metaLine }}</span>
                 <a href="{{ item.logUrl }}" target="_blank" rel="noopener" style="font-size:13px; font-weight:600; color:oklch(0.93 0.008 255); border:1px solid oklch(0.32 0.02 255); padding:7px 14px; border-radius:8px;" style-hover="border-color:oklch(0.6 0.02 255);">ログを見る →</a>
               </div>
+
+              <sc-if value="{{ item.hasJobset }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:11px; color:oklch(0.46 0.02 255); font-family:ui-monospace,'SF Mono',Menlo,monospace; word-break:break-all;">配役: {{ item.jobsetLabel }}</div>
+              </sc-if>
             </div>
           </sc-for>
         </div>
@@ -345,6 +365,7 @@ class Component extends DCLogic {
     trip: '',
     matchMode: 'or',
     villageQuery: '',
+    jobsetQuery: '',
     modes: new Set(),
     factions: new Set(),
     roles: new Set(),
@@ -404,6 +425,12 @@ class Component extends DCLogic {
 
   parseList(str) { return str.split(/[,、]/).map((s) => s.trim()).filter(Boolean); }
 
+  // Trip codes pasted straight from a log ("◆Sr0w9k") carry the tripcode marker,
+  // but our stored/matched trips never do (see parseApiLog). Strip it so pasted
+  // and typed input both match. NOTE: buildApiUrl() must keep the raw form —
+  // the live search API actually requires the marker for trips that have one.
+  parseTripList(str) { return this.parseList(str).map((s) => s.replace(/^[◆◇]/, '')); }
+
   playerMatches(p, names, trips) {
     const nameHit = names.length ? names.includes(p.name) : null;
     const tripHit = trips.length ? trips.includes(p.trip) : null;
@@ -424,20 +451,28 @@ class Component extends DCLogic {
 
   getMatchStats(list, names, trips) {
     let win = 0, lose = 0, unknown = 0;
+    const byFaction = new Map(); // faction label -> { win, lose, unknown }
     list.forEach((v) => {
       this.getMatchedPlayers(v, names, trips).forEach((p) => {
         if (p.result === 'win') win++;
         else if (p.result === 'lose') lose++;
         else unknown++;
+
+        if (!byFaction.has(p.faction)) byFaction.set(p.faction, { win: 0, lose: 0, unknown: 0 });
+        const f = byFaction.get(p.faction);
+        if (p.result === 'win') f.win++;
+        else if (p.result === 'lose') f.lose++;
+        else f.unknown++;
       });
     });
-    return { win, lose, unknown };
+    return { win, lose, unknown, byFaction };
   }
 
   passesFilters(v, names, trips) {
     const s = this.state;
     if (!this.matchesNameTrip(v, names, trips)) return false;
     if (s.villageQuery.trim() && !v.name.includes(s.villageQuery.trim())) return false;
+    if (s.jobsetQuery.trim() && !(v.jobset || '').includes(s.jobsetQuery.trim())) return false;
     if (s.modes.size && !s.modes.has(v.mode)) return false;
     if (s.excludeTimeout && v.hadTimeoutDeath) return false;
     if (s.factions.size && !v.players.some((p) => s.factions.has(p.faction))) return false;
@@ -454,7 +489,7 @@ class Component extends DCLogic {
 
   getFiltered() {
     const names = this.parseList(this.state.name);
-    const trips = this.parseList(this.state.trip);
+    const trips = this.parseTripList(this.state.trip);
     const list = this.state.logs.concat(this.state.importedLogs).filter((v) => this.passesFilters(v, names, trips));
     const dir = this.state.sortDir === 'asc' ? 1 : -1;
     const sorters = {
@@ -523,6 +558,7 @@ class Component extends DCLogic {
       totalPlayers: players.length,
       outcome: entry.winner ? `${normalizedWinnerTokens.join('と')}勝利` : '不明',
       hadTimeoutDeath: !!entry.totsushi,
+      jobset: entry.jobset || '',
       players,
     };
   }
@@ -613,7 +649,7 @@ class Component extends DCLogic {
 
   toResultView(v) {
     const names = this.parseList(this.state.name);
-    const trips = this.parseList(this.state.trip);
+    const trips = this.parseTripList(this.state.trip);
     const matched = this.getMatchedPlayers(v, names, trips);
     const accent = this.accent();
     const den = this.density();
@@ -644,6 +680,8 @@ class Component extends DCLogic {
       metaLine: v.totalPlayers > 0
         ? `${v.totalPlayers}人参加 ・ ${v.messageCount.toLocaleString('ja-JP')}件の発言 ・ ${v.outcome}`
         : '自動解析できませんでした（ログを直接開いて確認してください）',
+      hasJobset: !!v.jobset,
+      jobsetLabel: v.jobset || '',
       cardStyle: { background: 'oklch(0.19 0.02 255)', border: '1px solid oklch(0.27 0.02 255)', borderRadius: 14, padding: den.padding, display: 'flex', flexDirection: 'column', gap: den.innerGap },
     };
   }
@@ -660,12 +698,34 @@ class Component extends DCLogic {
     const bump = (extra) => Object.assign({ page: 1 }, extra);
 
     const names = this.parseList(this.state.name);
-    const trips = this.parseList(this.state.trip);
+    const trips = this.parseTripList(this.state.trip);
     const hasQuery = names.length > 0 || trips.length > 0;
     const matchStats = hasQuery ? this.getMatchStats(filtered, names, trips) : null;
     const matchedTotal = matchStats ? matchStats.win + matchStats.lose + matchStats.unknown : 0;
     const decided = matchStats ? matchStats.win + matchStats.lose : 0;
     const winRatePct = decided ? (matchStats.win / decided * 100).toFixed(1) : null;
+
+    const FACTION_ORDER = ['村人陣営', '人狼陣営', '妖狐陣営', '多数派陣営', '少数派陣営'];
+    const matchFactionRows = matchStats
+      ? [...matchStats.byFaction.entries()]
+          .map(([faction, s]) => {
+            const decidedF = s.win + s.lose;
+            return {
+              key: faction,
+              factionLabel: faction,
+              games: s.win + s.lose + s.unknown,
+              breakdownLabel: `${s.win}勝${s.lose}敗`,
+              winRateLabel: decidedF ? (s.win / decidedF * 100).toFixed(1) + '%' : '-',
+              sortOrder: FACTION_ORDER.indexOf(faction),
+            };
+          })
+          .sort((a, b) => {
+            if (a.sortOrder === -1 && b.sortOrder === -1) return b.games - a.games;
+            if (a.sortOrder === -1) return 1;
+            if (b.sortOrder === -1) return -1;
+            return a.sortOrder - b.sortOrder;
+          })
+      : [];
 
     return {
       eyebrowColor: accent,
@@ -692,6 +752,8 @@ class Component extends DCLogic {
       matchBreakdownLabel: matchStats
         ? `(${matchStats.win}勝 ${matchStats.lose}敗${matchStats.unknown ? ' ・ 不明' + matchStats.unknown + '件' : ''})`
         : '',
+      matchFactionRows,
+      hasMatchFactionRows: matchFactionRows.length > 0,
 
       name: this.state.name,
       onNameChange: (e) => this.setState({ name: e.target.value, page: 1 }),
@@ -709,6 +771,9 @@ class Component extends DCLogic {
 
       villageQuery: this.state.villageQuery,
       onVillageQueryChange: (e) => this.setState({ villageQuery: e.target.value, page: 1 }),
+
+      jobsetQuery: this.state.jobsetQuery,
+      onJobsetQueryChange: (e) => this.setState({ jobsetQuery: e.target.value, page: 1 }),
 
       modeOptions: MODES.map((m) => ({ key: m, label: m, style: this.chip(this.state.modes.has(m)), toggle: () => this.toggleSetItem('modes', m) })),
       factionOptions: FACTIONS.map((f) => ({ key: f, label: f, style: this.chip(this.state.factions.has(f)), toggle: () => this.toggleSetItem('factions', f) })),
@@ -733,7 +798,7 @@ class Component extends DCLogic {
       toggleSortDir: () => this.setState((s) => ({ sortDir: s.sortDir === 'asc' ? 'desc' : 'asc', page: 1 })),
 
       resetFilters: () => this.setState({
-        name: '', trip: '', matchMode: 'or', villageQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
+        name: '', trip: '', matchMode: 'or', villageQuery: '', jobsetQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
         excludeTimeout: false, dateFrom: '', dateTo: '', minPlayers: '', maxPlayers: '', minMessages: '', maxMessages: '', sortField: 'date', sortDir: 'desc', page: 1,
       }),
 
