@@ -1,0 +1,286 @@
+{
+  "version": 1,
+  "generatedAt": "2026-07-23T09:06:51.214Z",
+  "query": {
+    "name": "直人",
+    "trip": "",
+    "room": "",
+    "sdate": "",
+    "edate": "",
+    "ids": ""
+  },
+  "logsMatched": 21,
+  "logsAnalyzed": 21,
+  "players": [
+    {
+      "name": "ぼすたんあ",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 1,
+      "keyword": 0
+    },
+    {
+      "name": "三日月",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 1,
+      "keyword": 0
+    },
+    {
+      "name": "さとかん８番",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "田代ま＠んこ",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "まるお",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "ひで",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 1
+    },
+    {
+      "name": "のびた",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "りっか",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "あぁん",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "雪丸",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "いさみ",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "ぷに",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "ヨルヤ",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "清楚系美女",
+      "games": 1,
+      "kicked": 1,
+      "kickRate": 100,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "陣牢",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 2,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "鴉",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 1,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "あみちゃん",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 11,
+      "keyword": 1
+    },
+    {
+      "name": "ｙ",
+      "games": 6,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 3,
+      "keyword": 0
+    },
+    {
+      "name": "宮下",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 3,
+      "keyword": 0
+    },
+    {
+      "name": "アカサカサカス",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 1,
+      "keyword": 0
+    },
+    {
+      "name": "アントニオ芋木",
+      "games": 2,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 1,
+      "keyword": 0
+    },
+    {
+      "name": "お蕎麦屋さん",
+      "games": 2,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 1,
+      "keyword": 0
+    },
+    {
+      "name": "Koudai",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "初日犠牲者",
+      "games": 20,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "直人",
+      "games": 21,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 1
+    },
+    {
+      "name": "人狼",
+      "games": 20,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "しょうご",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "蒼斗",
+      "games": 1,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "炭治郎",
+      "games": 2,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    },
+    {
+      "name": "あやか様（仮）",
+      "games": 2,
+      "kicked": 0,
+      "kickRate": 0,
+      "spam": 0,
+      "noisy": 0,
+      "keyword": 0
+    }
+  ]
+}
