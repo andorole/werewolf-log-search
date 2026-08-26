@@ -225,6 +225,29 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
             <div style="font-size:12px; color:oklch(0.56 0.02 255); margin-bottom:10px;">{{ trollReportGeneratedLabel }} 生成</div>
           </sc-if>
 
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
+            <div style="flex:1; min-width:150px;">
+              <label style="display:block; font-size:11px; font-weight:700; margin-bottom:6px; color:oklch(0.66 0.02 255);">並び替え</label>
+              <select value="{{ trollSort }}" onChange="{{ onTrollSortChange }}" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:8px 10px; font-size:13px; color:oklch(0.93 0.008 255);">
+                <option value="kicked">追放された回数</option>
+                <option value="rate">追放率</option>
+                <option value="spam">同じ発言の連投</option>
+                <option value="noisy">記号の連投</option>
+                <option value="keyword">荒らし関連の発言</option>
+                <option value="games">参加数</option>
+              </select>
+            </div>
+            <div style="width:110px;">
+              <label style="display:block; font-size:11px; font-weight:700; margin-bottom:6px; color:oklch(0.66 0.02 255);">最低参加数</label>
+              <input type="number" value="{{ trollMinGames }}" onChange="{{ onTrollMinGamesChange }}" placeholder="1" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:8px 10px; font-size:13px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+            </div>
+            <div style="flex:1; min-width:150px;">
+              <label style="display:block; font-size:11px; font-weight:700; margin-bottom:6px; color:oklch(0.66 0.02 255);">名前で絞り込み</label>
+              <input type="text" value="{{ trollNameFilter }}" onChange="{{ onTrollNameFilterChange }}" placeholder="名前の一部" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:8px 10px; font-size:13px; color:oklch(0.93 0.008 255);" />
+            </div>
+          </div>
+          <div style="font-size:11px; color:oklch(0.46 0.02 255); margin-bottom:10px;">{{ trollReportCountLabel }} ・ 並び替えと絞り込みは取得済みデータに対してブラウザ内で行うため、再取得は発生しません。追放率は参加数が少ないほど当てになりません（1戦1追放でも100%）。</div>
+
           <sc-if value="{{ trollReportHasRows }}" hint-placeholder-val="{{ false }}">
             <div style="display:flex; flex-direction:column; gap:2px;">
               <sc-for list="{{ trollReportRows }}" as="row" hint-placeholder-count="3">
@@ -236,7 +259,7 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
             </div>
           </sc-if>
           <sc-if value="{{ trollReportEmptyRows }}" hint-placeholder-val="{{ false }}">
-            <div style="font-size:13px; color:oklch(0.56 0.02 255);">該当するプレイヤーは見つかりませんでした。</div>
+            <div style="font-size:13px; color:oklch(0.56 0.02 255);">条件に合うプレイヤーがいません。「最低参加数」を下げるか、名前の絞り込みを外してみてください。</div>
           </sc-if>
         </div>
       </sc-if>
@@ -487,6 +510,11 @@ class Component extends DCLogic {
     // reads its own report file and never touches other state, so if this feature
     // breaks it can't take the rest of the page down with it.
     trollReport: { status: 'idle', data: null, error: '' }, // status: idle | loading | ready | not_found | error
+    // View controls for the fetched report. Purely client-side re-sorting and
+    // filtering of data already downloaded — changing these never re-fetches.
+    trollSort: 'kicked', // kicked | rate | spam | noisy | keyword | games
+    trollMinGames: '1',
+    trollNameFilter: '',
   };
 
   componentDidMount() {
@@ -736,6 +764,27 @@ class Component extends DCLogic {
     return ['name', 'trip', 'room', 'sdate', 'edate'].every((k) => (current[k] || '') === (reportQuery[k] || ''));
   }
 
+  // Re-sorts / filters the already-downloaded report rows. No network access.
+  trollVisibleRows() {
+    const data = this.state.trollReport.data;
+    if (!data || !Array.isArray(data.players)) return [];
+    const SORTS = {
+      kicked: (a, b) => b.kicked - a.kicked || b.kickRate - a.kickRate || b.games - a.games,
+      rate: (a, b) => b.kickRate - a.kickRate || b.kicked - a.kicked || b.games - a.games,
+      spam: (a, b) => b.spam - a.spam || b.kicked - a.kicked,
+      noisy: (a, b) => b.noisy - a.noisy || b.kicked - a.kicked,
+      keyword: (a, b) => b.keyword - a.keyword || b.kicked - a.kicked,
+      games: (a, b) => b.games - a.games || b.kicked - a.kicked,
+    };
+    const min = Number(this.state.trollMinGames) || 0;
+    const needle = this.state.trollNameFilter.trim();
+    return data.players
+      .filter((p) => p.games >= min)
+      .filter((p) => !needle || String(p.name).includes(needle))
+      .slice()
+      .sort(SORTS[this.state.trollSort] || SORTS.kicked);
+  }
+
   formatTrollQueryLabel(q) {
     if (!q) return '';
     const parts = [];
@@ -819,6 +868,8 @@ class Component extends DCLogic {
     const rangeEnd = pageStart + visible.length;
     const accent = this.accent();
     const bump = (extra) => Object.assign({ page: 1 }, extra);
+
+    const trollRows = this.trollVisibleRows();
 
     const names = this.parseList(this.state.name);
     const trips = this.parseTripList(this.state.trip);
@@ -985,20 +1036,28 @@ class Component extends DCLogic {
         ? new Date(this.state.trollReport.data.generatedAt).toLocaleString('ja-JP')
         : '',
       trollReportSourceQueryLabel: this.formatTrollQueryLabel(this.state.trollReport.data && this.state.trollReport.data.query),
-      trollReportRows: this.state.trollReport.data
-        ? this.state.trollReport.data.players.map((p) => ({
-            key: p.name,
-            name: p.name,
-            games: p.games,
-            kicked: p.kicked,
-            kickRateLabel: p.kickRate + '%',
-            spam: p.spam,
-            noisy: p.noisy,
-            keyword: p.keyword,
-          }))
-        : [],
-      trollReportHasRows: !!(this.state.trollReport.data && this.state.trollReport.data.players.length > 0),
-      trollReportEmptyRows: !!(this.state.trollReport.data && this.state.trollReport.data.players.length === 0),
+      trollReportRows: trollRows.map((p) => ({
+        key: p.name,
+        name: p.name,
+        games: p.games,
+        kicked: p.kicked,
+        kickRateLabel: p.kickRate + '%',
+        spam: p.spam,
+        noisy: p.noisy,
+        keyword: p.keyword,
+      })),
+      trollReportHasRows: trollRows.length > 0,
+      trollReportEmptyRows: this.state.trollReport.status === 'ready' && trollRows.length === 0,
+      trollReportCountLabel: this.state.trollReport.data
+        ? `${trollRows.length} / ${this.state.trollReport.data.players.length} 人を表示`
+        : '',
+
+      trollSort: this.state.trollSort,
+      onTrollSortChange: (e) => this.setState({ trollSort: e.target.value }),
+      trollMinGames: this.state.trollMinGames,
+      onTrollMinGamesChange: (e) => this.setState({ trollMinGames: e.target.value }),
+      trollNameFilter: this.state.trollNameFilter,
+      onTrollNameFilterChange: (e) => this.setState({ trollNameFilter: e.target.value }),
     };
   }
 }

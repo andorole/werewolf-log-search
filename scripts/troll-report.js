@@ -169,7 +169,22 @@ async function run() {
     }
   }
 
-  const rows = [...players.values()]
+  // Everything below is pure post-processing of what we already fetched —
+  // no extra requests to zinro.net.
+  const SORTS = {
+    kicked: (a, b) => b.kicked - a.kicked || b.kickRate - a.kickRate || b.games - a.games,
+    rate: (a, b) => b.kickRate - a.kickRate || b.kicked - a.kicked || b.games - a.games,
+    spam: (a, b) => b.spam - a.spam || b.kicked - a.kicked,
+    noisy: (a, b) => b.noisy - a.noisy || b.kicked - a.kicked,
+    keyword: (a, b) => b.keyword - a.keyword || b.kicked - a.kicked,
+    games: (a, b) => b.games - a.games || b.kicked - a.kicked,
+  };
+  const sortKey = SORTS[args.sort] ? String(args.sort) : 'kicked';
+  // One game, one kick reads as "100%" and buries the real repeat offenders,
+  // so allow raising the floor.
+  const minGames = Number(args['min-games'] || 1);
+
+  const allRows = [...players.values()]
     .filter((p) => p.gamesPlayed > 0)
     .map((p) => ({
       name: p.name,
@@ -179,11 +194,13 @@ async function run() {
       spam: p.spamMessages,
       noisy: p.noisyMessages,
       keyword: p.keywordMessages,
-    }))
-    .sort((a, b) => b.kicked - a.kicked || b.spam - a.spam || b.noisy - a.noisy);
+    }));
+
+  const rows = allRows.filter((r) => r.games >= minGames).sort(SORTS[sortKey]);
 
   const top = Number(args.top || 30);
-  console.log('\n※ 追放は名前のみで名寄せしているため、同名の別人が混ざる可能性があります。\n');
+  console.log('\n※ 追放は名前のみで名寄せしているため、同名の別人が混ざる可能性があります。');
+  console.log(`※ 並び=${sortKey} / 最低参加数=${minGames} / 対象 ${rows.length}人（全${allRows.length}人）\n`);
   console.table(
     rows.slice(0, top).map((r) => ({ ...r, kickRate: r.kickRate + '%' }))
   );
@@ -202,9 +219,14 @@ async function run() {
         edate: args.edate || '',
         ids: args.ids || '',
       },
+      sortedBy: sortKey,
+      minGames,
       logsMatched: matchedCount,
       logsAnalyzed: fetched.length,
-      players: rows.slice(0, top),
+      // The site re-sorts and filters this list in the browser, so publish a
+      // generous slice rather than only the console's top-N. Costs no extra
+      // requests — these rows are already computed.
+      players: rows.slice(0, Number(args['json-top'] || 300)),
     };
     fs.mkdirSync(path.dirname(args.json), { recursive: true });
     fs.writeFileSync(args.json, JSON.stringify(report, null, 2));

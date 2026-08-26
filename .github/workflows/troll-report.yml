@@ -28,6 +28,17 @@ on:
         required: false
         type: string
         default: "300"
+      min_games:
+        description: "最低参加数（追放率を見るなら3以上推奨）"
+        required: false
+        type: string
+        default: "1"
+      sort:
+        description: "並び順"
+        required: false
+        default: "kicked"
+        type: choice
+        options: ["kicked", "rate", "spam", "noisy", "keyword", "games"]
 
 permissions:
   contents: write
@@ -54,6 +65,8 @@ jobs:
           IN_SDATE: ${{ inputs.sdate }}
           IN_EDATE: ${{ inputs.edate }}
           IN_LIMIT: ${{ inputs.limit }}
+          IN_MIN_GAMES: ${{ inputs.min_games }}
+          IN_SORT: ${{ inputs.sort }}
         run: |
           set -e
           ARGS=()
@@ -63,6 +76,8 @@ jobs:
           [ -n "$IN_SDATE" ] && ARGS+=(--sdate "$IN_SDATE")
           [ -n "$IN_EDATE" ] && ARGS+=(--edate "$IN_EDATE")
           [ -n "$IN_LIMIT" ] && ARGS+=(--limit "$IN_LIMIT")
+          [ -n "$IN_MIN_GAMES" ] && ARGS+=(--min-games "$IN_MIN_GAMES")
+          [ -n "$IN_SORT" ] && ARGS+=(--sort "$IN_SORT")
           node scripts/troll-report.js "${ARGS[@]}" --json reports/latest.json
 
       - name: Commit report
