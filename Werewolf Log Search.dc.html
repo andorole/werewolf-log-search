@@ -359,7 +359,9 @@ const CAST_TABLE = (() => {
   const base = (typeof window !== 'undefined' && window.WEREWOLF_CASTS) || {};
   const table = Object.assign({}, base);
   // 「猫」派生は配役表の注記どおり 村人−2 / 人狼＋1 / 猫又＋1 で機械的に作る。
+  // 対象は素の「11A」形式のみ（「12C聴狂人」等の固有名から派生させない）。
   for (const [label, comp] of Object.entries(base)) {
+    if (!/^\d{1,2}[ABCD]$/.test(label)) continue;
     const villagers = comp['村人'];
     if (!villagers || /[～~]/.test(villagers)) continue;
     const n = Number(villagers) - 2;

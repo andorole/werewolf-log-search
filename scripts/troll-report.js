@@ -123,15 +123,30 @@ async function run() {
   console.error(`fetched ${fetched.length}/${entries.length} logs`);
 
   for (const { id, msgs } of fetched) {
+    // Someone kicked before they ever spoke leaves no message of their own, so
+    // counting participants from messages alone would miss them — and then a
+    // kick with no matching game inflates kickRate past 100%. Seed the set with
+    // everyone the server announces a kick for in this log.
     const participants = new Set();
-    for (const m of msgs) if (m.job && m.job !== '観戦者' && m.from_user !== '鯖') participants.add(m.from_user);
-    for (const name of participants) getPlayer(players, name).gamesPlayed++;
-
-    const lastMsgByUser = new Map();
     for (const m of msgs) {
       if (m.from_user === '鯖') {
         const km = KICK_RE.exec((m.message || '').trim());
-        if (km) {
+        if (km) participants.add(km[1]);
+        continue;
+      }
+      if (m.job && m.job !== '観戦者') participants.add(m.from_user);
+    }
+    for (const name of participants) getPlayer(players, name).gamesPlayed++;
+
+    const lastMsgByUser = new Map();
+    const kickedThisLog = new Set();
+    for (const m of msgs) {
+      if (m.from_user === '鯖') {
+        const km = KICK_RE.exec((m.message || '').trim());
+        // The server can repeat the announcement; count one kick per player per log
+        // so kicked can never exceed gamesPlayed.
+        if (km && !kickedThisLog.has(km[1])) {
+          kickedThisLog.add(km[1]);
           const p = getPlayer(players, km[1]);
           p.kicked++;
           p.kickedLogs.push(id);
