@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="./support.js"></script>
 <script src="./log-data.js"></script>
+<script src="./casts.js"></script>
 </head>
 <body>
 <x-dc>
@@ -48,6 +49,15 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
           <input type="text" value="{{ trip }}" onChange="{{ onTripChange }}" placeholder="トリップ（例: Sr0w9k）" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:11px 14px; font-size:15px; color:oklch(0.93 0.008 255); font-family:ui-monospace,'SF Mono',Menlo,monospace;" style-focus="border-color:oklch(0.58 0.02 255);" />
           <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:6px;">「,」区切りで複数指定・完全一致</div>
         </div>
+        <div style="flex:1; min-width:240px;">
+          <label style="display:block; font-size:13px; font-weight:700; margin-bottom:8px;">村名</label>
+          <input type="text" value="{{ villageQuery }}" onChange="{{ onVillageQueryChange }}" placeholder="村名（例: にゃんこ村）" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:11px 14px; font-size:15px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+          <div style="display:flex; gap:8px; margin-top:8px;">
+            <button onClick="{{ setVillagePartial }}" style="{{ villagePartialStyle }}">部分一致</button>
+            <button onClick="{{ setVillageExact }}" style="{{ villageExactStyle }}">完全一致</button>
+          </div>
+          <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:6px;">{{ villageMatchHint }}</div>
+        </div>
       </div>
 
       <div style="display:flex; align-items:center; gap:20px; margin-top:18px; flex-wrap:wrap;">
@@ -61,7 +71,7 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
         </label>
       </div>
 
-      <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:12px; max-width:760px; line-height:1.6;">上の「名前」「トリップ」「村名」「開催日」「凸死ログ除外」の条件で有志運営の検索API(zinrostats)に問い合わせます。名前・トリップは完全一致、村名は部分一致です。検索するたびに前回の取得結果は入れ替わります（積み上がりません）。</div>
+      <div style="font-size:12px; color:oklch(0.46 0.02 255); margin-top:12px; max-width:760px; line-height:1.6;">上の「名前」「トリップ」「村名」「開催日」「凸死ログ除外」の条件で有志運営の検索API(zinrostats)に問い合わせます。名前・トリップは完全一致です。村名はAPIには部分一致で問い合わせ、「完全一致」を選んだ場合は取得後にこちら側で絞り込みます。検索するたびに前回の取得結果は入れ替わります（積み上がりません）。</div>
 
       <div style="display:flex; gap:12px; align-items:center; margin-top:14px; flex-wrap:wrap;">
         <button onClick="{{ runApiSearchHandler }}" disabled="{{ apiLoading }}" style="{{ apiSearchButtonStyle }}">{{ apiSearchButtonLabel }}</button>
@@ -138,12 +148,9 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
 
           <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:20px;">
             <div>
-              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">村名</label>
-              <input type="text" value="{{ villageQuery }}" onChange="{{ onVillageQueryChange }}" placeholder="村名で検索" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
-            </div>
-            <div>
-              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">配役（部分一致・実データのみ）</label>
-              <input type="text" value="{{ jobsetQuery }}" onChange="{{ onJobsetQueryChange }}" placeholder="例: 猫又 / 人狼-3" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+              <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">配役（実データのみ）</label>
+              <input type="text" value="{{ jobsetQuery }}" onChange="{{ onJobsetQueryChange }}" placeholder="例: 11a / 12a猫 / 猫又" style="width:100%; background:oklch(0.16 0.02 255); border:1px solid oklch(0.32 0.02 255); border-radius:8px; padding:10px 12px; font-size:14px; color:oklch(0.93 0.008 255);" style-focus="border-color:oklch(0.58 0.02 255);" />
+              <div style="font-size:12px; color:{{ jobsetHintColor }}; margin-top:6px; line-height:1.5;">{{ jobsetHint }}</div>
             </div>
             <div>
               <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">凸死ログ</label>
@@ -270,6 +277,9 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
                 <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
                   <a href="{{ item.logUrl }}" target="_blank" rel="noopener" style="font-size:17px; font-weight:700; color:oklch(0.93 0.008 255);" style-hover="color:oklch(0.98 0.008 255); text-decoration:underline;">{{ item.name }}</a>
                   <span style="{{ item.modeBadgeStyle }}">{{ item.modeLabel }}</span>
+                  <sc-if value="{{ item.hasCastLabels }}" hint-placeholder-val="{{ false }}">
+                    <span style="padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; background:oklch(0.60 0.13 165 / 0.18); color:oklch(0.78 0.13 165); white-space:nowrap;">{{ item.castLabels }}</span>
+                  </sc-if>
                   <sc-if value="{{ item.timeoutBadgeVisible }}" hint-placeholder-val="{{ false }}">
                     <span style="padding:3px 10px; border-radius:999px; font-size:12px; font-weight:600; background:oklch(0.78 0.15 25 / 0.18); color:oklch(0.78 0.15 25); white-space:nowrap;">凸死あり</span>
                   </sc-if>
@@ -341,6 +351,87 @@ const ROLE_FACTION = {
 
 const PAGE_SIZE = 20;
 
+// --- 定番配役（るる鯖表記）の解決 ---------------------------------------
+// casts.js の配役表をもとに、「11a」「12A猫」のような略称を実際の役職構成へ
+// 変換する。zinro.net の jobset 文字列（"人狼-2,占い師-1,...,役欠け:なし"）を
+// 役職→人数のマップに正規化して突き合わせる。
+const CAST_TABLE = (() => {
+  const base = (typeof window !== 'undefined' && window.WEREWOLF_CASTS) || {};
+  const table = Object.assign({}, base);
+  // 「猫」派生は配役表の注記どおり 村人−2 / 人狼＋1 / 猫又＋1 で機械的に作る。
+  for (const [label, comp] of Object.entries(base)) {
+    const villagers = comp['村人'];
+    if (!villagers || /[～~]/.test(villagers)) continue;
+    const n = Number(villagers) - 2;
+    if (!Number.isFinite(n) || n < 0) continue;
+    table[label + '猫'] = Object.assign({}, comp, {
+      '村人': String(n),
+      '人狼': String(Number(comp['人狼'] || 0) + 1),
+      '猫又': '1',
+    });
+  }
+  return table;
+})();
+
+// "人狼-2,占い師-1,役欠け:なし" -> { 人狼: 2, 占い師: 1 }
+function parseJobset(jobset) {
+  const out = {};
+  for (const part of String(jobset || '').split(',')) {
+    const token = part.trim();
+    if (!token || token.includes(':')) continue; // 役欠け:あり などのフラグは無視
+    const i = token.lastIndexOf('-');
+    if (i < 0) continue;
+    const role = token.slice(0, i).trim();
+    const n = parseInt(token.slice(i + 1), 10);
+    if (role && !isNaN(n)) out[role] = (out[role] || 0) + n;
+  }
+  return out;
+}
+
+function castValueMatches(spec, n) {
+  if (/[～~]/.test(spec)) {
+    const [a, b] = spec.split(/[～~]/).map(Number);
+    return n >= Math.min(a, b) && n <= Math.max(a, b);
+  }
+  return Number(spec) === n;
+}
+
+function castMatches(comp, actual) {
+  for (const key of new Set([...Object.keys(comp), ...Object.keys(actual)])) {
+    const spec = comp[key];
+    const n = actual[key] || 0;
+    if (spec === undefined) { if (n !== 0) return false; continue; }
+    if (!castValueMatches(spec, n)) return false;
+  }
+  return true;
+}
+
+// 入力を配役ラベルへ正規化。全角英数・小文字・空白ゆらぎを吸収する。
+function normalizeCastLabel(input) {
+  const s = String(input || '')
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+    .replace(/\s/g, '')
+    .toUpperCase();
+  const m = /^(\d{1,2})([ABCD])(.*)$/.exec(s);
+  if (!m) return null;
+  const label = m[1] + m[2] + m[3];
+  return CAST_TABLE[label] ? label : null;
+}
+
+// その構成に一致する定番配役ラベルをすべて返す（4A/4B/4D のように重複しうる）。
+function detectCastLabels(jobset) {
+  if (!jobset) return [];
+  const actual = parseJobset(jobset);
+  if (!Object.keys(actual).length) return [];
+  return Object.entries(CAST_TABLE)
+    .filter(([, comp]) => castMatches(comp, actual))
+    .map(([label]) => label);
+}
+
+function formatCastComp(comp) {
+  return Object.entries(comp).map(([role, n]) => `${role}${n}`).join(' ');
+}
+
 const DENSITY = {
   comfortable: { padding: '20px 22px', innerGap: '12px', listGap: '14px' },
   compact: { padding: '14px 16px', innerGap: '8px', listGap: '8px' },
@@ -365,6 +456,7 @@ class Component extends DCLogic {
     trip: '',
     matchMode: 'or',
     villageQuery: '',
+    villageMatchMode: 'partial', // 'partial' | 'exact'
     jobsetQuery: '',
     modes: new Set(),
     factions: new Set(),
@@ -431,6 +523,32 @@ class Component extends DCLogic {
   // the live search API actually requires the marker for trips that have one.
   parseTripList(str) { return this.parseList(str).map((s) => s.replace(/^[◆◇]/, '')); }
 
+  // Village names carry an auto-appended round counter — "にゃんこ村-148" in live
+  // API data, "白銀村 #8150" in the sample set. Strip it so an exact-match search
+  // for a village series ("にゃんこ村") matches every round of it. Typing the full
+  // name including the counter still works, since exact match tests both forms.
+  villageBaseName(name) { return (name || '').replace(/(?:\s*[-–—]\s*\d+|\s*#\s*\d+)$/, '').trim(); }
+
+  // 配役欄は「11a」等の定番配役ラベルなら構成そのものを照合し、
+  // それ以外は今までどおり jobset 文字列の部分一致で絞り込む。
+  jobsetMatches(v) {
+    const q = this.state.jobsetQuery.trim();
+    if (!q) return true;
+    const label = normalizeCastLabel(q);
+    if (label) return castMatches(CAST_TABLE[label], parseJobset(v.jobset));
+    return (v.jobset || '').includes(q);
+  }
+
+  villageMatches(v) {
+    const q = this.state.villageQuery.trim();
+    if (!q) return true;
+    const name = v.name || '';
+    if (this.state.villageMatchMode === 'exact') {
+      return name === q || this.villageBaseName(name) === this.villageBaseName(q);
+    }
+    return name.includes(q);
+  }
+
   playerMatches(p, names, trips) {
     const nameHit = names.length ? names.includes(p.name) : null;
     const tripHit = trips.length ? trips.includes(p.trip) : null;
@@ -471,8 +589,8 @@ class Component extends DCLogic {
   passesFilters(v, names, trips) {
     const s = this.state;
     if (!this.matchesNameTrip(v, names, trips)) return false;
-    if (s.villageQuery.trim() && !v.name.includes(s.villageQuery.trim())) return false;
-    if (s.jobsetQuery.trim() && !(v.jobset || '').includes(s.jobsetQuery.trim())) return false;
+    if (!this.villageMatches(v)) return false;
+    if (!this.jobsetMatches(v)) return false;
     if (s.modes.size && !s.modes.has(v.mode)) return false;
     if (s.excludeTimeout && v.hadTimeoutDeath) return false;
     if (s.factions.size && !v.players.some((p) => s.factions.has(p.faction))) return false;
@@ -651,6 +769,7 @@ class Component extends DCLogic {
     const names = this.parseList(this.state.name);
     const trips = this.parseTripList(this.state.trip);
     const matched = this.getMatchedPlayers(v, names, trips);
+    const castLabels = detectCastLabels(v.jobset);
     const accent = this.accent();
     const den = this.density();
     const modeBadge = {
@@ -682,6 +801,8 @@ class Component extends DCLogic {
         : '自動解析できませんでした（ログを直接開いて確認してください）',
       hasJobset: !!v.jobset,
       jobsetLabel: v.jobset || '',
+      castLabels: castLabels.join(' / '),
+      hasCastLabels: castLabels.length > 0,
       cardStyle: { background: 'oklch(0.19 0.02 255)', border: '1px solid oklch(0.27 0.02 255)', borderRadius: 14, padding: den.padding, display: 'flex', flexDirection: 'column', gap: den.innerGap },
     };
   }
@@ -771,9 +892,26 @@ class Component extends DCLogic {
 
       villageQuery: this.state.villageQuery,
       onVillageQueryChange: (e) => this.setState({ villageQuery: e.target.value, page: 1 }),
+      villagePartialStyle: this.chip(this.state.villageMatchMode !== 'exact'),
+      villageExactStyle: this.chip(this.state.villageMatchMode === 'exact'),
+      setVillagePartial: () => this.setState({ villageMatchMode: 'partial', page: 1 }),
+      setVillageExact: () => this.setState({ villageMatchMode: 'exact', page: 1 }),
+      villageMatchHint: this.state.villageMatchMode === 'exact'
+        ? '村名が一致するログのみ（末尾の開催回数「-12」は無視）'
+        : '村名の一部を含むログをすべて',
 
       jobsetQuery: this.state.jobsetQuery,
       onJobsetQueryChange: (e) => this.setState({ jobsetQuery: e.target.value, page: 1 }),
+      jobsetHint: (() => {
+        const q = this.state.jobsetQuery.trim();
+        if (!q) return '「11a」等の定番配役名（るる鯖表記）か、役職名の部分一致で絞り込めます。';
+        const label = normalizeCastLabel(q);
+        if (label) return `定番配役 ${label} として照合中: ${formatCastComp(CAST_TABLE[label])}`;
+        return `「${q}」は定番配役名ではないため、配役文字列の部分一致で絞り込みます。`;
+      })(),
+      jobsetHintColor: normalizeCastLabel(this.state.jobsetQuery.trim())
+        ? 'oklch(0.78 0.13 165)'
+        : 'oklch(0.46 0.02 255)',
 
       modeOptions: MODES.map((m) => ({ key: m, label: m, style: this.chip(this.state.modes.has(m)), toggle: () => this.toggleSetItem('modes', m) })),
       factionOptions: FACTIONS.map((f) => ({ key: f, label: f, style: this.chip(this.state.factions.has(f)), toggle: () => this.toggleSetItem('factions', f) })),
@@ -798,7 +936,7 @@ class Component extends DCLogic {
       toggleSortDir: () => this.setState((s) => ({ sortDir: s.sortDir === 'asc' ? 'desc' : 'asc', page: 1 })),
 
       resetFilters: () => this.setState({
-        name: '', trip: '', matchMode: 'or', villageQuery: '', jobsetQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
+        name: '', trip: '', matchMode: 'or', villageQuery: '', villageMatchMode: 'partial', jobsetQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
         excludeTimeout: false, dateFrom: '', dateTo: '', minPlayers: '', maxPlayers: '', minMessages: '', maxMessages: '', sortField: 'date', sortDir: 'desc', page: 1,
       }),
 
