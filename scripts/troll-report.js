@@ -10,6 +10,18 @@
 //   node scripts/troll-report.js --room 村 --sdate 2026-07-10 --edate 2026-07-23 --limit 200
 //   node scripts/troll-report.js --ids 1425497,1425322
 //   node scripts/troll-report.js --name しろ --json reports/latest.json
+//
+// SCOPE LIMIT — please keep this.
+// Always drive this from a search-API query (--name / --trip / --room), so the
+// number of log pages fetched stays at what one player or one village actually
+// produced (~120 logs for an active player). Do NOT add a mode that enumerates
+// log ids to cover "everyone", and do not assume a short date range makes that
+// safe — one day is already ~400 log pages. A sweep like that was tried once:
+// ~1,150 fetches in a few minutes, after which zinro.net refused most requests
+// and the operator's own access to the site degraded. It is a volunteer-run
+// service. If a feature seems to need full coverage, treat that as a reason to
+// say no, not as a reason to sweep; any such work would need a cache that never
+// re-fetches a log before it could even be considered.
 
 const API_BASE = 'https://ss1.xrea.com/zinrostats.s205.xrea.com/log_search';
 const LOG_BASE = 'https://zinro.net/m/log.php?id=';
