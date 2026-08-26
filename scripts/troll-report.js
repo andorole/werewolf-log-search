@@ -27,6 +27,10 @@ const API_BASE = 'https://ss1.xrea.com/zinrostats.s205.xrea.com/log_search';
 const LOG_BASE = 'https://zinro.net/m/log.php?id=';
 
 const KICK_RE = /^(.+?)さんを村から追放しました$/;
+// Not real people: 鯖 is the server's announcer, 初日犠牲者 is the placeholder the
+// game fills the first-night victim slot with. Both would otherwise show up in
+// the rankings with a game count.
+const SYSTEM_NAMES = new Set(['鯖', '初日犠牲者']);
 const TROLL_KEYWORDS = ['荒らし', 'キック', '蹴り'];
 
 function parseArgs(argv) {
@@ -125,7 +129,7 @@ async function run() {
       const e = entries[idx++];
       try {
         const msgs = await fetchLogMessages(e.id);
-        fetched.push({ id: e.id, room: e.room_name, msgs });
+        fetched.push({ id: e.id, room: e.room_name, players: e.players, msgs });
       } catch (err) {
         console.error(`log ${e.id} failed: ${err.message}`);
       }
@@ -134,19 +138,31 @@ async function run() {
   await Promise.all(Array.from({ length: concurrency }, worker));
   console.error(`fetched ${fetched.length}/${entries.length} logs`);
 
-  for (const { id, msgs } of fetched) {
-    // Someone kicked before they ever spoke leaves no message of their own, so
-    // counting participants from messages alone would miss them — and then a
-    // kick with no matching game inflates kickRate past 100%. Seed the set with
-    // everyone the server announces a kick for in this log.
+  for (const { id, players: roster, msgs } of fetched) {
+    // Who actually played this game. The search API hands us the real roster, so
+    // use it: a log page also carries lobby chat from people who never ended up
+    // in the game, and counting speakers instead badly overcounts — across ten
+    // sampled logs that was 221 "participants" against a true roster of 103,
+    // including a 4-player game credited to 31 people. Inflated denominators
+    // would quietly depress everyone's kick rate.
     const participants = new Set();
-    for (const m of msgs) {
-      if (m.from_user === '鯖') {
-        const km = KICK_RE.exec((m.message || '').trim());
-        if (km) participants.add(km[1]);
-        continue;
+    if (Array.isArray(roster) && roster.length) {
+      for (const p of roster) {
+        if (p && p.name && p.job !== '観戦者' && !SYSTEM_NAMES.has(p.name)) participants.add(p.name);
       }
-      if (m.job && m.job !== '観戦者') participants.add(m.from_user);
+    } else {
+      // --ids runs have no API roster; fall back to speakers.
+      for (const m of msgs) {
+        if (m.from_user === '鯖') continue;
+        if (m.job && m.job !== '観戦者' && !SYSTEM_NAMES.has(m.from_user)) participants.add(m.from_user);
+      }
+    }
+    // A kicked player is removed from the game and so can be missing from the
+    // roster; without this their kick would have no game to divide by.
+    for (const m of msgs) {
+      if (m.from_user !== '鯖') continue;
+      const km = KICK_RE.exec((m.message || '').trim());
+      if (km && !SYSTEM_NAMES.has(km[1])) participants.add(km[1]);
     }
     for (const name of participants) getPlayer(players, name).gamesPlayed++;
 
@@ -157,7 +173,7 @@ async function run() {
         const km = KICK_RE.exec((m.message || '').trim());
         // The server can repeat the announcement; count one kick per player per log
         // so kicked can never exceed gamesPlayed.
-        if (km && !kickedThisLog.has(km[1])) {
+        if (km && !kickedThisLog.has(km[1]) && !SYSTEM_NAMES.has(km[1])) {
           kickedThisLog.add(km[1]);
           const p = getPlayer(players, km[1]);
           p.kicked++;
@@ -166,6 +182,7 @@ async function run() {
         continue;
       }
       if (m.to_user !== 'ALL') continue; // public chat only
+      if (SYSTEM_NAMES.has(m.from_user)) continue;
       const text = (m.message || '').trim();
       const p = getPlayer(players, m.from_user);
 
