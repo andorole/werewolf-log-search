@@ -272,7 +272,16 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
 
     <div style="margin-top:32px;">
       <sc-if value="{{ loaded }}" hint-placeholder-val="{{ false }}">
-        <div style="font-size:14px; color:oklch(0.66 0.02 255); margin-bottom:16px;">{{ filteredCount }} 件中 {{ rangeStart }}〜{{ rangeEnd }} 件目を表示</div>
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+          <span style="font-size:14px; color:oklch(0.66 0.02 255);">{{ filteredCount }} 件中 {{ rangeStart }}〜{{ rangeEnd }} 件目を表示</span>
+          <sc-if value="{{ canExport }}" hint-placeholder-val="{{ false }}">
+            <span style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span style="font-size:12px; color:oklch(0.46 0.02 255);">検索結果{{ exportCountLabel }}を保存</span>
+              <button onClick="{{ exportCsvHandler }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.85 0.008 255); font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; cursor:pointer;">CSV</button>
+              <button onClick="{{ exportJsonHandler }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.85 0.008 255); font-size:12px; font-weight:600; padding:6px 12px; border-radius:8px; cursor:pointer;">JSON</button>
+            </span>
+          </sc-if>
+        </div>
 
         <sc-if value="{{ hasMatchStats }}" hint-placeholder-val="{{ false }}">
           <div style="margin-bottom:16px; padding:10px 16px; border:1px solid oklch(0.30 0.02 255); border-radius:10px; font-size:13px; color:oklch(0.85 0.008 255); background:oklch(0.19 0.02 255);">
@@ -550,6 +559,11 @@ class Component extends DCLogic {
   componentDidMount() {
     if (this.props.advancedFiltersDefaultOpen) this.setState({ advancedOpen: true });
     this.setState({ logs: window.WEREWOLF_SAMPLE_LOGS || [], loaded: true });
+    // Restore search conditions from the URL. Deliberately does NOT run the API
+    // search: that stays on the button, so opening or refreshing a link never
+    // issues a request of its own.
+    const restored = this.readStateFromUrl();
+    if (restored) this.setState(restored);
     try {
       const saved = localStorage.getItem('zinro-log-import-v1');
       if (saved) {
@@ -557,6 +571,80 @@ class Component extends DCLogic {
         if (Array.isArray(parsed)) this.setState({ importedLogs: parsed });
       }
     } catch (e) {}
+  }
+
+  // --- Search conditions in the URL ----------------------------------------
+  // Makes a search bookmarkable and shareable. Reading and writing the URL costs
+  // nothing; the deliberate omission is auto-running the API search on load,
+  // which would turn every page open into a request.
+  urlFields() {
+    return [
+      ['n', 'name'], ['t', 'trip'], ['m', 'matchMode'],
+      ['v', 'villageQuery'], ['vm', 'villageMatchMode'], ['j', 'jobsetQuery'],
+      ['df', 'dateFrom'], ['dt', 'dateTo'],
+      ['pmin', 'minPlayers'], ['pmax', 'maxPlayers'],
+      ['mmin', 'minMessages'], ['mmax', 'maxMessages'],
+      ['sf', 'sortField'], ['sd', 'sortDir'],
+    ];
+  }
+
+  urlSets() {
+    return [['md', 'modes'], ['fc', 'factions'], ['rl', 'roles'], ['oc', 'outcomes']];
+  }
+
+  serializeStateToQuery() {
+    const p = new URLSearchParams();
+    const defaults = { matchMode: 'or', villageMatchMode: 'partial', sortField: 'date', sortDir: 'desc' };
+    for (const [key, field] of this.urlFields()) {
+      const val = this.state[field];
+      if (!val) continue;
+      if (defaults[field] !== undefined && val === defaults[field]) continue;
+      p.set(key, val);
+    }
+    for (const [key, field] of this.urlSets()) {
+      const set = this.state[field];
+      if (set && set.size) p.set(key, [...set].join('|'));
+    }
+    if (this.state.excludeTimeout) p.set('nt', '1');
+    if (!this.state.apiIncludeOneNight) p.set('on', '0');
+    if (!this.state.apiIncludeWordWolf) p.set('ww', '0');
+    return p.toString();
+  }
+
+  readStateFromUrl() {
+    let p;
+    try { p = new URLSearchParams(window.location.search); } catch (e) { return null; }
+    if (![...p.keys()].length) return null;
+    const next = {};
+    for (const [key, field] of this.urlFields()) {
+      if (p.has(key)) next[field] = p.get(key);
+    }
+    for (const [key, field] of this.urlSets()) {
+      if (p.has(key)) next[field] = new Set(p.get(key).split('|').filter(Boolean));
+    }
+    if (p.get('nt') === '1') next.excludeTimeout = true;
+    if (p.get('on') === '0') next.apiIncludeOneNight = false;
+    if (p.get('ww') === '0') next.apiIncludeWordWolf = false;
+    // Conditions beyond the basics live behind the toggle; open it so a shared
+    // link doesn't look like it dropped them.
+    const anySet = (s) => s && s.size > 0;
+    if (next.jobsetQuery || next.dateFrom || next.dateTo || anySet(next.modes) || anySet(next.roles)
+        || anySet(next.factions) || anySet(next.outcomes) || next.excludeTimeout) {
+      next.advancedOpen = true;
+    }
+    return Object.keys(next).length ? next : null;
+  }
+
+  // Called from renderVals. replaceState neither navigates nor re-renders, and
+  // the guard keeps it to actual changes.
+  syncUrl() {
+    if (typeof window === 'undefined' || !window.history || !window.history.replaceState) return;
+    const qs = this.serializeStateToQuery();
+    if (qs === this._lastQs) return;
+    this._lastQs = qs;
+    try {
+      window.history.replaceState(null, '', qs ? '?' + qs : window.location.pathname);
+    } catch (e) { /* file:// disallows this; harmless */ }
   }
 
   accent() { return this.props.accentColor || '#E3B34F'; }
@@ -851,6 +939,69 @@ class Component extends DCLogic {
     return ['name', 'trip', 'room', 'sdate', 'edate'].every((k) => (current[k] || '') === (reportQuery[k] || ''));
   }
 
+  // --- Export ---------------------------------------------------------------
+  // Builds a file from what the page already holds. No requests.
+  buildExportRows() {
+    const names = this.parseList(this.state.name);
+    const trips = this.parseTripList(this.state.trip);
+    return this.getFiltered().map((v) => {
+      const matched = this.getMatchedPlayers(v, names, trips);
+      const me = matched[0];
+      return {
+        村名: v.name,
+        開催日時: v.dateLabel || v.date,
+        モード: v.mode,
+        配役: v.jobset || '',
+        定番配役: detectCastLabels(v.jobset).join(' / '),
+        参加人数: v.totalPlayers,
+        発言数: v.messageCount,
+        勝敗結果: v.outcome,
+        凸死: v.hadTimeoutDeath ? 'あり' : 'なし',
+        一致プレイヤー: me ? me.name : '',
+        トリップ: me ? me.trip : '',
+        役職: me ? me.role : '',
+        陣営: me ? me.faction : '',
+        勝敗: me ? (me.result === 'win' ? '勝利' : me.result === 'lose' ? '敗北' : '不明') : '',
+        ログURL: v.logUrl,
+      };
+    });
+  }
+
+  toCsv(rows) {
+    if (!rows.length) return '';
+    const cols = Object.keys(rows[0]);
+    const esc = (s) => {
+      const t = String(s == null ? '' : s);
+      return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t;
+    };
+    // Excel opens UTF-8 CSV as mojibake without a BOM.
+    return '﻿' + [cols.join(','), ...rows.map((r) => cols.map((c) => esc(r[c])).join(','))].join('\r\n');
+  }
+
+  downloadFile(filename, text, mime) {
+    try {
+      const blob = new Blob([text], { type: mime + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) { /* download blocked by the host page */ }
+  }
+
+  exportCsv() {
+    const rows = this.buildExportRows();
+    if (rows.length) this.downloadFile('werewolf-logs.csv', this.toCsv(rows), 'text/csv');
+  }
+
+  exportJson() {
+    const rows = this.buildExportRows();
+    if (rows.length) this.downloadFile('werewolf-logs.json', JSON.stringify(rows, null, 2), 'application/json');
+  }
+
   // Re-sorts / filters the already-downloaded report rows. No network access.
   trollVisibleRows() {
     const data = this.state.trollReport.data;
@@ -946,6 +1097,7 @@ class Component extends DCLogic {
   }
 
   renderVals() {
+    this.syncUrl();
     const filtered = this.getFiltered();
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     const currentPage = Math.min(this.state.page, totalPages);
@@ -1086,6 +1238,11 @@ class Component extends DCLogic {
         name: '', trip: '', matchMode: 'or', villageQuery: '', villageMatchMode: 'partial', jobsetQuery: '', modes: new Set(), factions: new Set(), roles: new Set(), outcomes: new Set(),
         excludeTimeout: false, dateFrom: '', dateTo: '', minPlayers: '', maxPlayers: '', minMessages: '', maxMessages: '', sortField: 'date', sortDir: 'desc', page: 1,
       }),
+
+      exportCsvHandler: () => this.exportCsv(),
+      exportJsonHandler: () => this.exportJson(),
+      canExport: filtered.length > 0,
+      exportCountLabel: `${filtered.length}件`,
 
       listContainerStyle: { display: 'flex', flexDirection: 'column', gap: this.density().listGap },
       resultsView: visible.map((v) => this.toResultView(v)),
