@@ -78,14 +78,18 @@ jobs:
           [ -n "$IN_LIMIT" ] && ARGS+=(--limit "$IN_LIMIT")
           [ -n "$IN_MIN_GAMES" ] && ARGS+=(--min-games "$IN_MIN_GAMES")
           [ -n "$IN_SORT" ] && ARGS+=(--sort "$IN_SORT")
-          node scripts/troll-report.js "${ARGS[@]}" --json reports/latest.json
+          # --cache means a log is downloaded once ever; later reports covering
+          # the same games re-read it from the repo instead of re-fetching.
+          node scripts/troll-report.js "${ARGS[@]}" \
+            --json reports/latest.json \
+            --cache reports/log-cache.json
 
       - name: Commit report
         run: |
           set -e
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add reports/latest.json
+          git add reports/latest.json reports/log-cache.json
           if git diff --cached --quiet; then
             echo "No changes to commit"
           else

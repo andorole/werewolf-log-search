@@ -54,14 +54,38 @@ async function searchLogs(params) {
   return json.log_data || [];
 }
 
-async function fetchLogMessages(id) {
-  const res = await fetch(LOG_BASE + id, { signal: AbortSignal.timeout(15000) });
-  const html = await res.text();
-  const m = html.match(/var message = (\[.*?\]);/s);
-  if (!m) return [];
-  const arr = JSON.parse(m[1]);
-  arr.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
-  return arr;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Identify the tool, so the site's operator sees what this traffic is and can
+// ask us to stop, rather than just seeing an anonymous scraper.
+const USER_AGENT =
+  'werewolf-log-search/1.0 (fan-made log analyser; https://github.com/andorole/werewolf-log-search)';
+// zinro.net is volunteer-run and will start serving pages without the message
+// block if pushed. Space requests out and back off rather than racing.
+const REQUEST_SPACING_MS = 120;
+
+async function fetchLogMessages(id, attempts = 3) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(LOG_BASE + id, {
+        headers: { 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(20000),
+      });
+      const html = await res.text();
+      const m = html.match(/var message = (\[.*?\]);/s);
+      if (m) {
+        const arr = JSON.parse(m[1]);
+        arr.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
+        return arr;
+      }
+      lastErr = new Error('no message block (http ' + res.status + ', ' + html.length + ' bytes)');
+    } catch (e) {
+      lastErr = e;
+    }
+    if (attempt < attempts) await sleep(500 * attempt * attempt);
+  }
+  throw lastErr || new Error('failed');
 }
 
 // Flags messages dominated by long runs of a single repeated character (e.g.
@@ -76,25 +100,108 @@ function isSymbolFlood(text) {
   return covered / text.length > 0.5;
 }
 
-function getPlayer(players, name) {
-  if (!players.has(name)) {
-    players.set(name, {
+const normTrip = (t) => String(t || '').replace(/^[◆◇]/, '');
+// Identity is the trip when there is one, because display names are shared far
+// more than you would guess: "嵐" alone was 59 different trips across 121 games.
+// Aggregating by name merges unrelated people, which for a kick statistic means
+// blaming the wrong person. Names stay in the key so a tripless player is still
+// distinct from a tripped one.
+const identityKey = (name, trip) => name + '\u0000' + normTrip(trip);
+
+function getPlayer(players, name, trip) {
+  const key = identityKey(name, trip);
+  if (!players.has(key)) {
+    players.set(key, {
       name,
+      trip: normTrip(trip),
       gamesPlayed: 0,
       kicked: 0,
       kickedLogs: [],
       spamMessages: 0,
       noisyMessages: 0,
       keywordMessages: 0,
-      keywordLogs: new Set(),
     });
   }
-  return players.get(name);
+  return players.get(key);
+}
+
+// Reduce one log to just the facts the report needs. This is what gets cached,
+// so a log is only ever downloaded once no matter how many reports include it.
+function deriveLogFacts(roster, msgs) {
+  const facts = { roster: [], kicks: [], speakers: {} };
+
+  if (Array.isArray(roster) && roster.length) {
+    for (const p of roster) {
+      if (p && p.name && p.job !== '観戦者' && !SYSTEM_NAMES.has(p.name)) {
+        facts.roster.push([p.name, normTrip(p.trip)]);
+      }
+    }
+  } else {
+    // --ids runs have no API roster; fall back to speakers, trip unknown.
+    const seen = new Set();
+    for (const m of msgs) {
+      if (m.from_user === '鯖' || SYSTEM_NAMES.has(m.from_user)) continue;
+      if (m.job && m.job !== '観戦者' && !seen.has(m.from_user)) {
+        seen.add(m.from_user);
+        facts.roster.push([m.from_user, '']);
+      }
+    }
+  }
+
+  const lastMsgByUser = new Map();
+  const kicked = new Set();
+  for (const m of msgs) {
+    if (m.from_user === '鯖') {
+      const km = KICK_RE.exec((m.message || '').trim());
+      // The server can repeat the announcement; one kick per player per log.
+      if (km && !kicked.has(km[1]) && !SYSTEM_NAMES.has(km[1])) {
+        kicked.add(km[1]);
+        facts.kicks.push(km[1]);
+      }
+      continue;
+    }
+    if (m.to_user !== 'ALL') continue; // public chat only
+    if (SYSTEM_NAMES.has(m.from_user)) continue;
+    const text = (m.message || '').trim();
+    const s = facts.speakers[m.from_user] || (facts.speakers[m.from_user] = [0, 0, 0]);
+    const prev = lastMsgByUser.get(m.from_user);
+    if (prev && prev === text && text.length > 0) s[0]++; // spam
+    if (isSymbolFlood(text)) s[1]++;                      // symbol flood
+    if (TROLL_KEYWORDS.some((k) => text.includes(k))) s[2]++;
+    lastMsgByUser.set(m.from_user, text);
+  }
+  // Most players trip none of these; dropping their all-zero rows keeps the
+  // cache file small.
+  for (const [k, v] of Object.entries(facts.speakers)) {
+    if (!v[0] && !v[1] && !v[2]) delete facts.speakers[k];
+  }
+  return facts;
+}
+
+const CACHE_VERSION = 1;
+
+async function loadCache(file) {
+  if (!file) return null;
+  const fs = await import('node:fs');
+  try {
+    const c = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (c && c.version === CACHE_VERSION && c.logs) return c;
+    console.error('cache present but not version ' + CACHE_VERSION + '; starting fresh');
+  } catch (e) { /* no cache yet */ }
+  return { version: CACHE_VERSION, logs: {} };
+}
+
+async function saveCache(file, cache) {
+  if (!file || !cache) return;
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(cache));
 }
 
 async function run() {
   const args = parseArgs(process.argv.slice(2));
-  const concurrency = Number(args.concurrency || 8);
+  const concurrency = Number(args.concurrency || 4);
 
   let entries;
   let matchedCount;
@@ -120,81 +227,94 @@ async function run() {
   const limit = args.limit ? Number(args.limit) : entries.length;
   entries = entries.slice(0, limit);
 
-  const players = new Map(); // keyed by display name only (kick messages carry no trip)
-  const fetched = [];
+  const players = new Map(); // keyed by name+trip — see identityKey
+  const cache = await loadCache(args.cache);
+  const analyzed = [];
   let idx = 0;
+  let fromCache = 0;
+  let downloaded = 0;
 
   async function worker() {
     while (idx < entries.length) {
       const e = entries[idx++];
+      const cached = cache && cache.logs[e.id];
+      if (cached) {
+        analyzed.push({ id: e.id, facts: cached });
+        fromCache++;
+        continue; // the whole point: no request at all for a log we've seen
+      }
       try {
         const msgs = await fetchLogMessages(e.id);
-        fetched.push({ id: e.id, room: e.room_name, players: e.players, msgs });
+        const facts = deriveLogFacts(e.players, msgs);
+        if (cache) cache.logs[e.id] = facts;
+        analyzed.push({ id: e.id, facts });
+        downloaded++;
       } catch (err) {
         console.error(`log ${e.id} failed: ${err.message}`);
       }
+      await sleep(REQUEST_SPACING_MS);
     }
   }
   await Promise.all(Array.from({ length: concurrency }, worker));
-  console.error(`fetched ${fetched.length}/${entries.length} logs`);
+  console.error(
+    `analyzed ${analyzed.length}/${entries.length} logs` +
+    (cache ? ` (${downloaded} downloaded, ${fromCache} from cache)` : '')
+  );
+  await saveCache(args.cache, cache);
 
-  for (const { id, players: roster, msgs } of fetched) {
-    // Who actually played this game. The search API hands us the real roster, so
-    // use it: a log page also carries lobby chat from people who never ended up
-    // in the game, and counting speakers instead badly overcounts — across ten
-    // sampled logs that was 221 "participants" against a true roster of 103,
-    // including a 4-player game credited to 31 people. Inflated denominators
-    // would quietly depress everyone's kick rate.
-    const participants = new Set();
-    if (Array.isArray(roster) && roster.length) {
-      for (const p of roster) {
-        if (p && p.name && p.job !== '観戦者' && !SYSTEM_NAMES.has(p.name)) participants.add(p.name);
-      }
-    } else {
-      // --ids runs have no API roster; fall back to speakers.
-      for (const m of msgs) {
-        if (m.from_user === '鯖') continue;
-        if (m.job && m.job !== '観戦者' && !SYSTEM_NAMES.has(m.from_user)) participants.add(m.from_user);
-      }
+  // Kick announcements carry only a name, and being kicked removes you from the
+  // game — so 20 of 25 sampled kicks named someone absent from that log's
+  // roster, and the log page has no trip anywhere. Recover the trip by looking
+  // the name up across every roster we analysed: if the name belongs to exactly
+  // one trip in this data set, the attribution is unambiguous.
+  const tripsByName = new Map();
+  for (const { facts } of analyzed) {
+    for (const [name, trip] of facts.roster) {
+      if (!trip) continue;
+      if (!tripsByName.has(name)) tripsByName.set(name, new Set());
+      tripsByName.get(name).add(trip);
     }
-    // A kicked player is removed from the game and so can be missing from the
-    // roster; without this their kick would have no game to divide by.
-    for (const m of msgs) {
-      if (m.from_user !== '鯖') continue;
-      const km = KICK_RE.exec((m.message || '').trim());
-      if (km && !SYSTEM_NAMES.has(km[1])) participants.add(km[1]);
-    }
-    for (const name of participants) getPlayer(players, name).gamesPlayed++;
+  }
 
-    const lastMsgByUser = new Map();
-    const kickedThisLog = new Set();
-    for (const m of msgs) {
-      if (m.from_user === '鯖') {
-        const km = KICK_RE.exec((m.message || '').trim());
-        // The server can repeat the announcement; count one kick per player per log
-        // so kicked can never exceed gamesPlayed.
-        if (km && !kickedThisLog.has(km[1]) && !SYSTEM_NAMES.has(km[1])) {
-          kickedThisLog.add(km[1]);
-          const p = getPlayer(players, km[1]);
-          p.kicked++;
-          p.kickedLogs.push(id);
+  let ambiguousKicks = 0;
+  for (const { id, facts } of analyzed) {
+    // Names are unique within a single log — checked across 248 logs / 1440
+    // player rows, zero duplicates — so a name present in the roster resolves
+    // to exactly one person.
+    const tripOf = new Map(facts.roster.map(([n, t]) => [n, t]));
+
+    for (const [name, trip] of facts.roster) {
+      getPlayer(players, name, trip).gamesPlayed++;
+    }
+
+    for (const name of facts.kicks) {
+      let trip = tripOf.get(name);
+      let countsAsGame = false;
+      if (trip === undefined) {
+        const candidates = tripsByName.get(name);
+        if (candidates && candidates.size === 1) {
+          trip = [...candidates][0]; // unique across the data set
+        } else {
+          trip = '';                 // genuinely ambiguous, or never seen with a trip
+          ambiguousKicks++;
         }
-        continue;
+        // They were removed from the roster, so this game is not counted yet.
+        countsAsGame = true;
       }
-      if (m.to_user !== 'ALL') continue; // public chat only
-      if (SYSTEM_NAMES.has(m.from_user)) continue;
-      const text = (m.message || '').trim();
-      const p = getPlayer(players, m.from_user);
+      const p = getPlayer(players, name, trip);
+      if (countsAsGame) p.gamesPlayed++;
+      p.kicked++;
+      p.kickedLogs.push(id);
+    }
 
-      if (TROLL_KEYWORDS.some((k) => text.includes(k))) {
-        p.keywordMessages++;
-        p.keywordLogs.add(id);
-      }
-      if (isSymbolFlood(text)) p.noisyMessages++;
-
-      const prev = lastMsgByUser.get(m.from_user);
-      if (prev && prev === text && text.length > 0) p.spamMessages++;
-      lastMsgByUser.set(m.from_user, text);
+    for (const [name, [spam, noisy, keyword]] of Object.entries(facts.speakers)) {
+      // A speaker with no roster entry was in the lobby but not in the game.
+      const trip = tripOf.get(name);
+      if (trip === undefined) continue;
+      const p = getPlayer(players, name, trip);
+      p.spamMessages += spam;
+      p.noisyMessages += noisy;
+      p.keywordMessages += keyword;
     }
   }
 
@@ -217,6 +337,11 @@ async function run() {
     .filter((p) => p.gamesPlayed > 0)
     .map((p) => ({
       name: p.name,
+      trip: p.trip,
+      // How many different trips were seen using this display name. >1 means the
+      // name alone does not identify a person, so a tripless row under it may be
+      // mixing people together.
+      nameTrips: (tripsByName.get(p.name) || new Set()).size,
       games: p.gamesPlayed,
       kicked: p.kicked,
       kickRate: p.gamesPlayed ? Number(((p.kicked / p.gamesPlayed) * 100).toFixed(1)) : 0,
@@ -228,10 +353,22 @@ async function run() {
   const rows = allRows.filter((r) => r.games >= minGames).sort(SORTS[sortKey]);
 
   const top = Number(args.top || 30);
-  console.log('\n※ 追放は名前のみで名寄せしているため、同名の別人が混ざる可能性があります。');
+  console.log('\n※ 同一人物の判定はトリップで行っています（トリップ無しの人は名前のみ）。');
+  if (ambiguousKicks) {
+    console.log(`※ 名簿に載る前に追放された ${ambiguousKicks} 件は、トリップを特定できていません。`);
+  }
   console.log(`※ 並び=${sortKey} / 最低参加数=${minGames} / 対象 ${rows.length}人（全${allRows.length}人）\n`);
   console.table(
-    rows.slice(0, top).map((r) => ({ ...r, kickRate: r.kickRate + '%' }))
+    rows.slice(0, top).map((r) => ({
+      name: r.name,
+      trip: r.trip || '(なし)',
+      games: r.games,
+      kicked: r.kicked,
+      kickRate: r.kickRate + '%',
+      spam: r.spam,
+      noisy: r.noisy,
+      keyword: r.keyword,
+    }))
   );
 
   if (args.json) {
@@ -250,8 +387,10 @@ async function run() {
       },
       sortedBy: sortKey,
       minGames,
+      ambiguousKicks,
       logsMatched: matchedCount,
-      logsAnalyzed: fetched.length,
+      logsAnalyzed: analyzed.length,
+      logsFromCache: fromCache,
       // The site re-sorts and filters this list in the browser, so publish a
       // generous slice rather than only the console's top-N. Costs no extra
       // requests — these rows are already computed.

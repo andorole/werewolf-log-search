@@ -252,7 +252,12 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
             <div style="display:flex; flex-direction:column; gap:2px;">
               <sc-for list="{{ trollReportRows }}" as="row" hint-placeholder-count="3">
                 <div style="display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; padding:8px 0; border-bottom:1px solid oklch(0.24 0.02 255); font-size:13px;">
-                  <span style="font-weight:700; font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ row.name }}</span>
+                  <span style="font-weight:700; font-family:ui-monospace,'SF Mono',Menlo,monospace;">
+                    {{ row.name }}
+                    <sc-if value="{{ row.hasAmbiguityNote }}" hint-placeholder-val="{{ false }}">
+                      <span style="font-weight:600; font-family:inherit; color:oklch(0.78 0.15 75); margin-left:6px;">{{ row.ambiguityNote }}</span>
+                    </sc-if>
+                  </span>
                   <span style="color:oklch(0.66 0.02 255);">{{ row.games }}戦 ・ 追放{{ row.kicked }}回({{ row.kickRateLabel }}) ・ スパム{{ row.spam }} ・ 記号{{ row.noisy }} ・ 荒らし関連発言{{ row.keyword }}</span>
                 </div>
               </sc-for>
@@ -284,6 +289,31 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
                     <span>{{ fr.winRateLabel }}（{{ fr.breakdownLabel }}）</span>
                   </div>
                 </sc-for>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ hasMatchRoleRows }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px; padding-top:8px; border-top:1px solid oklch(0.28 0.02 255);">
+                <div style="font-size:11px; font-weight:700; color:oklch(0.66 0.02 255); margin-bottom:6px;">役職別</div>
+                <div style="display:flex; flex-direction:column; gap:4px;">
+                  <sc-for list="{{ matchRoleRows }}" as="rr" hint-placeholder-count="3">
+                    <div style="display:flex; justify-content:space-between; gap:12px; font-size:12px; color:oklch(0.66 0.02 255);">
+                      <span>{{ rr.roleLabel }}（{{ rr.games }}戦）</span>
+                      <span>{{ rr.detailLabel }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ hasCoPlayerRows }}" hint-placeholder-val="{{ false }}">
+              <div style="margin-top:10px; padding-top:8px; border-top:1px solid oklch(0.28 0.02 255);">
+                <div style="font-size:11px; font-weight:700; color:oklch(0.66 0.02 255); margin-bottom:6px;">よく同席する人</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                  <sc-for list="{{ coPlayerRows }}" as="cp" hint-placeholder-count="4">
+                    <span style="font-size:12px; color:oklch(0.66 0.02 255); border:1px solid oklch(0.30 0.02 255); border-radius:999px; padding:3px 10px;">{{ cp.label }} {{ cp.countLabel }}</span>
+                  </sc-for>
+                </div>
               </div>
             </sc-if>
           </div>
@@ -597,6 +627,63 @@ class Component extends DCLogic {
     return v.players.filter((p) => this.playerMatches(p, names, trips));
   }
 
+  // --- Per-role record and frequent co-players -----------------------------
+  // Both are derived from the logs already loaded in the page (sample data plus
+  // whatever the API search brought back), so they cost no requests at all.
+
+  getRoleStats(list, names, trips) {
+    const byRole = new Map(); // role -> { games, win, lose, mes }
+    list.forEach((v) => {
+      this.getMatchedPlayers(v, names, trips).forEach((p) => {
+        if (!byRole.has(p.role)) byRole.set(p.role, { games: 0, win: 0, lose: 0, mes: 0 });
+        const r = byRole.get(p.role);
+        r.games++;
+        if (p.result === 'win') r.win++;
+        else if (p.result === 'lose') r.lose++;
+        r.mes += Number(p.mes) || 0;
+      });
+    });
+    return [...byRole.entries()]
+      .map(([role, r]) => {
+        const decided = r.win + r.lose;
+        const rate = decided ? (r.win / decided * 100).toFixed(1) + '%' : '-';
+        // Sample data carries no per-player message counts, so only mention the
+        // average where the numbers actually exist.
+        const avg = r.mes > 0 ? ` ・ 平均${Math.round(r.mes / r.games)}発言` : '';
+        return {
+          key: role,
+          roleLabel: role,
+          games: r.games,
+          detailLabel: `${rate}（${r.win}勝${r.lose}敗）${avg}`,
+        };
+      })
+      .sort((a, b) => b.games - a.games);
+  }
+
+  getCoPlayers(list, names, trips) {
+    const counts = new Map(); // "name\u0000trip" -> { name, trip, n }
+    list.forEach((v) => {
+      const matched = this.getMatchedPlayers(v, names, trips);
+      if (!matched.length) return;
+      const self = new Set(matched.map((p) => p.name + '\u0000' + (p.trip || '')));
+      v.players.forEach((p) => {
+        const key = p.name + '\u0000' + (p.trip || '');
+        if (self.has(key)) return;
+        if (!counts.has(key)) counts.set(key, { name: p.name, trip: p.trip || '', n: 0 });
+        counts.get(key).n++;
+      });
+    });
+    return [...counts.values()]
+      .filter((c) => c.n > 1) // one shared game says nothing
+      .sort((a, b) => b.n - a.n)
+      .slice(0, 12)
+      .map((c) => ({
+        key: c.name + c.trip,
+        label: c.trip ? `${c.name}（${c.trip}）` : c.name,
+        countLabel: c.n + '回',
+      }));
+  }
+
   getMatchStats(list, names, trips) {
     let win = 0, lose = 0, unknown = 0;
     const byFaction = new Map(); // faction label -> { win, lose, unknown }
@@ -780,7 +867,7 @@ class Component extends DCLogic {
     const needle = this.state.trollNameFilter.trim();
     return data.players
       .filter((p) => p.games >= min)
-      .filter((p) => !needle || String(p.name).includes(needle))
+      .filter((p) => !needle || String(p.name).includes(needle) || String(p.trip || '').includes(needle))
       .slice()
       .sort(SORTS[this.state.trollSort] || SORTS.kicked);
   }
@@ -879,6 +966,9 @@ class Component extends DCLogic {
     const decided = matchStats ? matchStats.win + matchStats.lose : 0;
     const winRatePct = decided ? (matchStats.win / decided * 100).toFixed(1) : null;
 
+    const matchRoleRows = hasQuery ? this.getRoleStats(filtered, names, trips) : [];
+    const coPlayerRows = hasQuery ? this.getCoPlayers(filtered, names, trips) : [];
+
     const FACTION_ORDER = ['村人陣営', '人狼陣営', '妖狐陣営', '多数派陣営', '少数派陣営'];
     const matchFactionRows = matchStats
       ? [...matchStats.byFaction.entries()]
@@ -928,6 +1018,10 @@ class Component extends DCLogic {
         : '',
       matchFactionRows,
       hasMatchFactionRows: matchFactionRows.length > 0,
+      matchRoleRows,
+      hasMatchRoleRows: matchRoleRows.length > 0,
+      coPlayerRows,
+      hasCoPlayerRows: coPlayerRows.length > 0,
 
       name: this.state.name,
       onNameChange: (e) => this.setState({ name: e.target.value, page: 1 }),
@@ -1037,8 +1131,12 @@ class Component extends DCLogic {
         : '',
       trollReportSourceQueryLabel: this.formatTrollQueryLabel(this.state.trollReport.data && this.state.trollReport.data.query),
       trollReportRows: trollRows.map((p) => ({
-        key: p.name,
-        name: p.name,
+        key: p.name + '\u0000' + (p.trip || ''),
+        name: p.trip ? `${p.name}（${p.trip}）` : p.name,
+        // A tripless row under a name that several trips use may be mixing
+        // people; say so instead of presenting it as one person's record.
+        ambiguityNote: !p.trip && p.nameTrips > 1 ? `※この名前は${p.nameTrips}人が使用` : '',
+        hasAmbiguityNote: !p.trip && p.nameTrips > 1,
         games: p.games,
         kicked: p.kicked,
         kickRateLabel: p.kickRate + '%',
