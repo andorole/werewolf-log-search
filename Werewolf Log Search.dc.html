@@ -471,11 +471,14 @@ function castMatches(comp, actual) {
 }
 
 // 入力を配役ラベルへ正規化。全角英数・小文字・空白ゆらぎを吸収する。
+// 「11a」のような英字つきだけでなく、「15カオス」のような英字なしの名前も引ける。
 function normalizeCastLabel(input) {
   const s = String(input || '')
     .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
     .replace(/\s/g, '')
     .toUpperCase();
+  if (!s) return null;
+  if (CAST_TABLE[s]) return s;
   const m = /^(\d{1,2})([ABCD])(.*)$/.exec(s);
   if (!m) return null;
   const label = m[1] + m[2] + m[3];

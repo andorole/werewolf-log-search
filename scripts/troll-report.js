@@ -79,8 +79,17 @@ async function fetchLogMessages(id, attempts = 3) {
         arr.sort((a, b) => (a.created < b.created ? -1 : a.created > b.created ? 1 : 0));
         return arr;
       }
+      // A log that has been deleted answers 200 with a stub page of a few dozen
+      // bytes. That is a settled answer, not a hiccup — retrying it twice more
+      // would have meant 186 requests for the 62 gone logs in one real run.
+      if (html.length < 200) {
+        const gone = new Error('log no longer available');
+        gone.gone = true;
+        throw gone;
+      }
       lastErr = new Error('no message block (http ' + res.status + ', ' + html.length + ' bytes)');
     } catch (e) {
+      if (e && e.gone) throw e;
       lastErr = e;
     }
     if (attempt < attempts) await sleep(500 * attempt * attempt);
@@ -233,6 +242,7 @@ async function run() {
   let idx = 0;
   let fromCache = 0;
   let downloaded = 0;
+  let gone = 0;
 
   async function worker() {
     while (idx < entries.length) {
@@ -250,7 +260,10 @@ async function run() {
         analyzed.push({ id: e.id, facts });
         downloaded++;
       } catch (err) {
-        console.error(`log ${e.id} failed: ${err.message}`);
+        // Deleted logs are ordinary for an older player's history and say
+        // nothing about our request rate; keep them out of the error noise.
+        if (err && err.gone) gone++;
+        else console.error(`log ${e.id} failed: ${err.message}`);
       }
       await sleep(REQUEST_SPACING_MS);
     }
@@ -258,7 +271,8 @@ async function run() {
   await Promise.all(Array.from({ length: concurrency }, worker));
   console.error(
     `analyzed ${analyzed.length}/${entries.length} logs` +
-    (cache ? ` (${downloaded} downloaded, ${fromCache} from cache)` : '')
+    (cache ? ` (${downloaded} downloaded, ${fromCache} from cache)` : '') +
+    (gone ? `; ${gone} logs no longer exist on zinro.net` : '')
   );
   await saveCache(args.cache, cache);
 
