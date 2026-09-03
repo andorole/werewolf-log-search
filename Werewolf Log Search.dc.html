@@ -556,6 +556,10 @@ class Component extends DCLogic {
     // reads its own report file and never touches other state, so if this feature
     // breaks it can't take the rest of the page down with it.
     trollReport: { status: 'idle', data: null, error: '' }, // status: idle | loading | ready | not_found | error
+    // The report can run to hundreds of rows, so the same button collapses it
+    // again. Closing keeps the fetched data; reopening re-reads the file so a
+    // report regenerated in the meantime still shows up.
+    trollReportOpen: false,
     // View controls for the fetched report. Purely client-side re-sorting and
     // filtering of data already downloaded — changing these never re-fetches.
     trollSort: 'kicked', // kicked | rate | spam | noisy | keyword | games
@@ -1043,8 +1047,17 @@ class Component extends DCLogic {
     return parts.length ? parts.join(' / ') : '(条件なし)';
   }
 
+  // One button for both: open (fetching fresh) when closed, collapse when open.
+  toggleTrollReport() {
+    if (this.state.trollReportOpen) {
+      this.setState({ trollReportOpen: false });
+      return;
+    }
+    this.fetchTrollReport();
+  }
+
   async fetchTrollReport() {
-    this.setState({ trollReport: { status: 'loading', data: null, error: '' } });
+    this.setState({ trollReportOpen: true, trollReport: { status: 'loading', data: null, error: '' } });
     try {
       const res = await fetch('./reports/latest.json', { cache: 'no-store' });
       if (res.status === 404) {
@@ -1280,11 +1293,13 @@ class Component extends DCLogic {
       // --- Troll report (isolated; see trollReport state + methods above) ---
       trollReportRunUrl: this.trollReportRunUrl(),
       trollReportQueryLabel: this.formatTrollQueryLabel(this.trollReportQuery()),
-      fetchTrollReportHandler: () => this.fetchTrollReport(),
-      trollReportButtonLabel: this.state.trollReport.status === 'loading' ? '確認中…' : '結果を確認',
-      trollReportNotFound: this.state.trollReport.status === 'not_found',
-      trollReportFetchError: this.state.trollReport.status === 'error',
-      trollReportReady: this.state.trollReport.status === 'ready',
+      fetchTrollReportHandler: () => this.toggleTrollReport(),
+      trollReportButtonLabel: this.state.trollReport.status === 'loading'
+        ? '確認中…'
+        : (this.state.trollReportOpen ? '結果を閉じる' : '結果を確認'),
+      trollReportNotFound: this.state.trollReportOpen && this.state.trollReport.status === 'not_found',
+      trollReportFetchError: this.state.trollReportOpen && this.state.trollReport.status === 'error',
+      trollReportReady: this.state.trollReportOpen && this.state.trollReport.status === 'ready',
       trollReportMatches:
         this.state.trollReport.status === 'ready' &&
         this.trollReportQueryMatchesCurrent(this.state.trollReport.data && this.state.trollReport.data.query),
