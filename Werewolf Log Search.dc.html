@@ -125,7 +125,7 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
             <div>
               <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">参加陣営</label>
               <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <sc-for list="{{ factionOptions }}" as="opt" hint-placeholder-count="5">
+                <sc-for list="{{ factionOptions }}" as="opt" hint-placeholder-count="7">
                   <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
                 </sc-for>
               </div>
@@ -133,7 +133,7 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
             <div>
               <label style="display:block; font-size:12px; font-weight:700; margin-bottom:8px; color:oklch(0.66 0.02 255);">役職</label>
               <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <sc-for list="{{ roleOptions }}" as="opt" hint-placeholder-count="14">
+                <sc-for list="{{ roleOptions }}" as="opt" hint-placeholder-count="21">
                   <button onClick="{{ opt.toggle }}" style="{{ opt.style }}">{{ opt.label }}</button>
                 </sc-for>
               </div>
@@ -402,13 +402,43 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
   &quot;resultDensity&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;comfortable&quot;, &quot;options&quot;: [&quot;comfortable&quot;, &quot;compact&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;動作&quot;}
 }">
 const MODES = ['通常', 'ワンナイト', 'ワードウルフ'];
-const FACTIONS = ['村人陣営', '人狼陣営', '妖狐陣営', '多数派陣営', '少数派陣営'];
-const ROLES = ['村人', '占い師', '霊媒師', '狩人', '共有者', '猫又', 'パン屋', '役人', '人狼', '狂人', '妖狐', '背徳者', '多数派', '少数派'];
+// 陣営名は zinro.net が勝敗に書く語に「陣営」を付けたもの。API の winner フィールドは
+// 素のチーム名を返す（"村人チーム" ではなく "村人"）ので、突き合わせ時は「陣営」を外す。
+const FACTIONS = ['村人陣営', '人狼陣営', '妖狐陣営', 'てるてる陣営', '恋人陣営', '多数派陣営', '少数派陣営'];
+
+// 役職一覧の出典は zinro.net 本体の役職一覧（【人狼チーム】【村人チーム】【妖狐チーム】
+// 【てるてるチーム】【恋人チーム】の5見出し・全19役職）。多数派/少数派はワードウルフ専用。
+const ROLES = [
+  '村人', '占い師', '霊能者', '狩人', '共有者', '猫又', 'パン屋', '役人', '狼憑き', 'ものまね', '怪盗',
+  '人狼', '狂人', '狂信者', '黒猫',
+  '妖狐', '背徳者',
+  'てるてる', '恋人',
+  '多数派', '少数派',
+];
+
 const ROLE_FACTION = {
-  村人: '村人陣営', 占い師: '村人陣営', 霊媒師: '村人陣営', 狩人: '村人陣営', 共有者: '村人陣営', 猫又: '村人陣営', パン屋: '村人陣営', 役人: '村人陣営',
-  人狼: '人狼陣営', 狂人: '人狼陣営',
+  村人: '村人陣営', 占い師: '村人陣営', 霊能者: '村人陣営', 狩人: '村人陣営', 共有者: '村人陣営',
+  猫又: '村人陣営', パン屋: '村人陣営', 役人: '村人陣営', ものまね: '村人陣営',
+  // 狼憑きは占い結果が黒で、黒猫の道連れ対象からも人狼と同じ扱いで除外されるが、
+  // 勝利条件は村人チームのもの（zinro.net「占われると人狼と判定される村人」）。
+  // 占い結果につられて人狼陣営に直すと、全ての狼憑き行の勝敗が反転する。
+  狼憑き: '村人陣営',
+  // 旧称。ルール説明ページ側は今も「霊媒師」表記なので別名として残す。
+  霊媒師: '村人陣営',
+  人狼: '人狼陣営', 狂人: '人狼陣営', 狂信者: '人狼陣営',
+  // 黒猫は【人狼チーム】。村人チームの猫又とは別物なので、名前の部分一致で
+  // まとめないこと（15カオスでは両方が同時に出る）。
+  黒猫: '人狼陣営',
   妖狐: '妖狐陣営', 背徳者: '妖狐陣営',
+  てるてる: 'てるてる陣営',
+  // 恋人は他チームの決着時に生き残っていれば同時に勝つため、winner が
+  // 「恋人と人狼」のような複合になる。トークン分割側で対応済み。
+  恋人: '恋人陣営',
   多数派: '多数派陣営', 少数派: '少数派陣営',
+  // 怪盗はあえて載せない。夜に他人と役職を交換でき、交換相手が人狼なら
+  // 「勝利条件も人狼陣営の物になります」（zinro.net 役職説明）。ログの job は
+  // 交換後も「怪盗」のままなので、固定の陣営を当てると交換が起きた村で勝敗を
+  // 逆に記録してしまう。陣営「不明」＝勝率の母数から外す、が唯一正しい扱い。
 };
 
 const PAGE_SIZE = 20;
@@ -892,7 +922,12 @@ class Component extends DCLogic {
       logUrl: `https://zinro.net/m/log.php?id=${entry.id}`,
       messageCount: players.reduce((sum, p) => sum + p.mes, 0),
       totalPlayers: players.length,
-      outcome: entry.winner ? `${normalizedWinnerTokens.join('と')}勝利` : '不明',
+      // winner はチーム名とは限らない。ワンナイトの平和村で誰かを処刑した場合は
+      // "全員敗北" が入るので、「〜勝利」を付けると意味が反転する。チーム名を
+      // 名乗っていない winner はそのまま表示する。
+      outcome: entry.winner
+        ? (normalizedWinnerTokens.some((t) => FACTIONS.includes(t)) ? `${normalizedWinnerTokens.join('と')}勝利` : entry.winner)
+        : '不明',
       hadTimeoutDeath: !!entry.totsushi,
       jobset: entry.jobset || '',
       players,
@@ -1143,7 +1178,9 @@ class Component extends DCLogic {
     const matchRoleRows = hasQuery ? this.getRoleStats(filtered, names, trips) : [];
     const coPlayerRows = hasQuery ? this.getCoPlayers(filtered, names, trips) : [];
 
-    const FACTION_ORDER = ['村人陣営', '人狼陣営', '妖狐陣営', '多数派陣営', '少数派陣営'];
+    // 表示順は FACTIONS の定義順そのまま。陣営を足したときにここを直し忘れて
+    // 新しい陣営だけ末尾に落ちる、というのを避けるため一覧を二重に持たない。
+    const FACTION_ORDER = FACTIONS;
     const matchFactionRows = matchStats
       ? [...matchStats.byFaction.entries()]
           .map(([faction, s]) => {
