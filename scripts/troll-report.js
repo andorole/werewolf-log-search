@@ -125,6 +125,14 @@ function getPlayer(players, name, trip) {
       trip: normTrip(trip),
       gamesPlayed: 0,
       kicked: 0,
+      // { id, basis } per kick. basis records HOW this kick was tied to this
+      // person, because the announcement itself only carries a display name:
+      //   'roster'      … the name was in that log's roster, so it is exact
+      //   'name-unique' … not in the roster; the trip was inferred from the name
+      //                   being used by exactly one trip across the analysed set
+      //   'ambiguous'   … the name is shared, or never seen with a trip
+      // Only 'roster' is certain. Keeping the basis per kick lets the page show
+      // which rows are inferred instead of presenting a guess as a fact.
       kickedLogs: [],
       spamMessages: 0,
       noisyMessages: 0,
@@ -304,12 +312,15 @@ async function run() {
     for (const name of facts.kicks) {
       let trip = tripOf.get(name);
       let countsAsGame = false;
+      let basis = 'roster'; // the name was still in the roster: exact attribution
       if (trip === undefined) {
         const candidates = tripsByName.get(name);
         if (candidates && candidates.size === 1) {
           trip = [...candidates][0]; // unique across the data set
+          basis = 'name-unique';     // inferred, not observed — could be someone else
         } else {
           trip = '';                 // genuinely ambiguous, or never seen with a trip
+          basis = 'ambiguous';
           ambiguousKicks++;
         }
         // They were removed from the roster, so this game is not counted yet.
@@ -318,7 +329,7 @@ async function run() {
       const p = getPlayer(players, name, trip);
       if (countsAsGame) p.gamesPlayed++;
       p.kicked++;
-      p.kickedLogs.push(id);
+      p.kickedLogs.push({ id, basis });
     }
 
     for (const [name, [spam, noisy, keyword]] of Object.entries(facts.speakers)) {
@@ -347,6 +358,10 @@ async function run() {
   // so allow raising the floor.
   const minGames = Number(args['min-games'] || 1);
 
+  // A single person's log list is for reading by eye, so cap it; the counts
+  // above it stay complete either way, and the flag says when it was cut.
+  const MAX_KICK_LOGS = 60;
+
   const allRows = [...players.values()]
     .filter((p) => p.gamesPlayed > 0)
     .map((p) => ({
@@ -359,6 +374,13 @@ async function run() {
       games: p.gamesPlayed,
       kicked: p.kicked,
       kickRate: p.gamesPlayed ? Number(((p.kicked / p.gamesPlayed) * 100).toFixed(1)) : 0,
+      // Split of `kicked` by how the kick was tied to this person. Only
+      // kickedExact is observed; the rest are inferred from the display name.
+      kickedExact: p.kickedLogs.filter((k) => k.basis === 'roster').length,
+      kickedInferred: p.kickedLogs.filter((k) => k.basis === 'name-unique').length,
+      kickedAmbiguous: p.kickedLogs.filter((k) => k.basis === 'ambiguous').length,
+      kickedLogs: p.kickedLogs.slice(0, MAX_KICK_LOGS),
+      kickedLogsTruncated: p.kickedLogs.length > MAX_KICK_LOGS,
       spam: p.spamMessages,
       noisy: p.noisyMessages,
       keyword: p.keywordMessages,

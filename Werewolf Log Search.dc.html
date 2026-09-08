@@ -202,7 +202,7 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
 
     <div style="margin-top:20px; background:oklch(0.19 0.02 255); border:1px solid oklch(0.27 0.02 255); border-radius:14px; padding:20px 24px;">
       <div style="font-size:14px; font-weight:700; margin-bottom:6px;">荒らし傾向レポート（実験的）</div>
-      <div style="font-size:12px; color:oklch(0.56 0.02 255); line-height:1.7; margin-bottom:14px;">現在の条件（{{ trollReportQueryLabel }}）でGitHub Actionsを手動実行すると、追放回数・スパム投稿・記号荒らしを集計します。実行してから反映まで1〜2分ほどかかります。</div>
+      <div style="font-size:12px; color:oklch(0.56 0.02 255); line-height:1.7; margin-bottom:14px;">現在の条件（{{ trollReportQueryLabel }}）でGitHub Actionsを手動実行すると、追放回数・スパム投稿・記号荒らしを集計します。実行してから反映まで1〜2分ほどかかります。名前やトリップで検索していれば、結果のいちばん上にその人だけの追放件数と追放された村へのリンクが出ます。<br />ただし<strong>追放された人はその村の名簿から消える</strong>ため、名前だけを条件に実行すると追放された村自体が検索に掛からず、件数が実際より少なく出ます（手元のログでは追放の81%が名簿に不在）。その人の追放を数え漏らしなく見たいときは、よく遊んでいる村名や期間を条件にして実行してください。</div>
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <a href="{{ trollReportRunUrl }}" target="_blank" rel="noopener" style="font-size:13px; font-weight:600; color:oklch(0.93 0.008 255); border:1px solid oklch(0.32 0.02 255); padding:9px 16px; border-radius:8px;" style-hover="border-color:oklch(0.6 0.02 255);">GitHubで実行 →</a>
         <button onClick="{{ fetchTrollReportHandler }}" style="border:1px solid oklch(0.32 0.02 255); color:oklch(0.93 0.008 255); font-size:13px; font-weight:600; padding:9px 16px; border-radius:8px; cursor:pointer;">{{ trollReportButtonLabel }}</button>
@@ -223,6 +223,54 @@ a:hover{color:oklch(0.85 0.15 75);text-decoration:underline;}
           </sc-if>
           <sc-if value="{{ trollReportMatches }}" hint-placeholder-val="{{ false }}">
             <div style="font-size:12px; color:oklch(0.56 0.02 255); margin-bottom:10px;">{{ trollReportGeneratedLabel }} 生成</div>
+          </sc-if>
+
+          <sc-if value="{{ trollFocusVisible }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-bottom:16px; padding:12px 14px; border:1px solid oklch(0.34 0.02 255); border-radius:10px; background:oklch(0.17 0.02 255);">
+              <div style="font-size:11px; font-weight:700; letter-spacing:0.06em; color:oklch(0.66 0.02 255); margin-bottom:8px;">検索中の人の追放記録</div>
+              <sc-if value="{{ trollFocusMultiple }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:12px; color:oklch(0.78 0.15 75); margin-bottom:8px;">{{ trollFocusMultipleLabel }}</div>
+              </sc-if>
+              <sc-if value="{{ trollFocusUndercountRisk }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:11px; color:oklch(0.78 0.15 75); line-height:1.7; margin-bottom:8px; padding:8px 10px; border-radius:8px; background:oklch(0.78 0.15 75 / 0.08);">※ このレポートは名前・トリップだけを条件に実行されているため、<strong>追放件数は下限値です</strong>。追放された人はその村の名簿から消えるので、名前で検索しても追放された村自体が見つかりません（手元のログでは追放67件中54件＝81%が名簿に不在でした）。実数に近づけたいときは、その人がよく遊ぶ<strong>村名や期間</strong>を条件にして実行し直してください。</div>
+              </sc-if>
+              <sc-for list="{{ trollFocusRows }}" as="fr" hint-placeholder-count="1">
+                <div style="padding:8px 0; border-top:1px solid oklch(0.24 0.02 255);">
+                  <div style="font-size:13px; font-weight:700; font-family:ui-monospace,'SF Mono',Menlo,monospace; margin-bottom:4px;">{{ fr.label }}</div>
+                  <div style="{{ fr.summaryStyle }}">{{ fr.summaryLabel }}</div>
+                  <sc-if value="{{ fr.sharedName }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px; color:oklch(0.78 0.15 75); margin-top:4px;">{{ fr.sharedNameLabel }}</div>
+                  </sc-if>
+                  <sc-if value="{{ fr.showAllExact }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px; color:oklch(0.56 0.02 255); margin-top:4px;">すべて村の参加者名簿から本人と確認できた追放です。</div>
+                  </sc-if>
+                  <sc-if value="{{ fr.showBreakdown }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px; color:oklch(0.78 0.15 75); margin-top:4px;">{{ fr.breakdownLabel }} ／ 「推定」「不明」は追放時に名簿から消えていて名前でしか辿れなかったもので、同名の別人の可能性があります。</div>
+                  </sc-if>
+                  <sc-if value="{{ fr.breakdownUnavailable }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px; color:oklch(0.78 0.15 75); margin-top:4px;">このレポートは追放ログの記録に対応する前に生成されたものです。GitHubで実行し直すと、追放された村へのリンクと確定／推定の内訳が出ます。</div>
+                  </sc-if>
+                  <sc-if value="{{ fr.hasLogs }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:8px;">
+                      <sc-for list="{{ fr.logs }}" as="lg" hint-placeholder-count="3">
+                        <a href="{{ lg.url }}" target="_blank" rel="noopener" style="display:inline-flex; align-items:center; gap:5px; font-size:12px; font-family:ui-monospace,'SF Mono',Menlo,monospace; color:oklch(0.93 0.008 255); border:1px solid oklch(0.32 0.02 255); border-radius:999px; padding:4px 10px;" style-hover="border-color:oklch(0.6 0.02 255);">
+                          {{ lg.label }}<span style="{{ lg.basisStyle }}">{{ lg.basisLabel }}</span>
+                        </a>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ fr.truncated }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11px; color:oklch(0.56 0.02 255); margin-top:6px;">※ 追放された村が多いため、リンクは最初の60件のみ表示しています（件数は全件の合計です）。</div>
+                  </sc-if>
+                </div>
+              </sc-for>
+              <sc-if value="{{ trollFocusCapped }}" hint-placeholder-val="{{ false }}">
+                <div style="font-size:11px; color:oklch(0.56 0.02 255); margin-top:8px; padding-top:8px; border-top:1px solid oklch(0.24 0.02 255);">{{ trollFocusCappedLabel }}</div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{ trollFocusEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-bottom:16px; padding:12px 14px; border:1px solid oklch(0.30 0.02 255); border-radius:10px; font-size:13px; color:oklch(0.66 0.02 255);">検索中の名前・トリップに一致する人が、このレポートの集計対象にいませんでした（＝この範囲では追放も参加も記録されていません）。</div>
           </sc-if>
 
           <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:12px;">
@@ -442,6 +490,10 @@ const ROLE_FACTION = {
 };
 
 const PAGE_SIZE = 20;
+
+// A display name can be shared by dozens of unrelated people, so the per-person
+// panel shows only the most-kicked few rather than every match.
+const TROLL_FOCUS_LIMIT = 30;
 
 // --- 定番配役（るる鯖表記）の解決 ---------------------------------------
 // casts.js の配役表をもとに、「11a」「12A猫」のような略称を実際の役職構成へ
@@ -1071,6 +1123,94 @@ class Component extends DCLogic {
       .sort(SORTS[this.state.trollSort] || SORTS.kicked);
   }
 
+  // --- Per-person kick record ----------------------------------------------
+  // Picks the searched person out of the already-downloaded report. No network
+  // access, and no extra load on zinro.net: the logs were fetched when the
+  // report was generated, and the links below just point at them.
+  //
+  // The kick announcement in a log reads "◯◯さんを村から追放しました" and carries
+  // ONLY a display name — and being kicked removes you from that log's roster,
+  // so the trip is often not recoverable from the log itself. The report
+  // therefore records, per kick, how it was tied to a person (see kickedLogs in
+  // scripts/troll-report.js). We surface that split rather than hiding it,
+  // because a display name can belong to several people and an inferred kick
+  // could be someone else's.
+  trollFocusMatches() {
+    const data = this.state.trollReport.data;
+    if (!data || !Array.isArray(data.players)) return [];
+    const names = this.parseList(this.state.name);
+    const trips = this.parseTripList(this.state.trip);
+    if (!names.length && !trips.length) return [];
+    // Same matcher as the log list, so "名前かトリップ" / "両方" behaves alike.
+    // A popular display name can match dozens of unrelated people ("嵐" was 27
+    // identities in a 59-log sample), so put the ones with kicks first.
+    return data.players
+      .filter((p) => this.playerMatches(p, names, trips))
+      .sort((a, b) => (b.kicked - a.kicked) || (b.games - a.games));
+  }
+
+  // True when the loaded report was scoped by person only. Such a run analyses
+  // the villages the person appears in, which by construction excludes the ones
+  // they were kicked out of — so its kick count is a floor, not a total.
+  // Scoping by 村名 or 期間 instead analyses whole villages and does see them.
+  reportScopeUndercountsKicks() {
+    const q = this.state.trollReport.data && this.state.trollReport.data.query;
+    if (!q) return false;
+    return !!(q.name || q.trip) && !q.room && !q.sdate && !q.edate && !q.ids;
+  }
+
+  buildTrollFocusRow(p) {
+    const kicked = Number(p.kicked) || 0;
+    const logs = Array.isArray(p.kickedLogs) ? p.kickedLogs : null;
+    const exact = Number(p.kickedExact) || 0;
+    const inferred = Number(p.kickedInferred) || 0;
+    const ambiguous = Number(p.kickedAmbiguous) || 0;
+    // Reports generated before kick provenance was recorded have the counts but
+    // not the breakdown. Say so instead of implying everything is confirmed.
+    const hasBreakdown = logs !== null;
+    const allExact = hasBreakdown && kicked > 0 && exact === kicked;
+    const BASIS = {
+      roster: { label: '確定', certain: true },
+      'name-unique': { label: '推定', certain: false },
+      ambiguous: { label: '不明', certain: false },
+    };
+    return {
+      key: p.name + ' ' + (p.trip || ''),
+      label: p.trip ? `${p.name}（${p.trip}）` : p.name,
+      noTrip: !p.trip,
+      summaryLabel: kicked > 0
+        ? `${p.games}戦中 ${kicked}回 追放（${p.kickRate}%）`
+        : `${p.games}戦 ・ 追放記録なし`,
+      summaryStyle: kicked > 0
+        ? { fontSize: 13, fontWeight: 700, color: 'oklch(0.78 0.15 75)' }
+        : { fontSize: 13, fontWeight: 700, color: 'oklch(0.66 0.02 255)' },
+      hasKicks: kicked > 0,
+      // Only the 確定 rows are observed; the rest are inferred from the name.
+      showBreakdown: hasBreakdown && kicked > 0 && !allExact,
+      breakdownLabel: `内訳: 確定${exact}件 ・ 推定${inferred}件 ・ 不明${ambiguous}件`,
+      showAllExact: allExact,
+      breakdownUnavailable: !hasBreakdown && kicked > 0,
+      // A display name shared by several trips cannot identify one person, so a
+      // row without a trip under such a name may be mixing people together.
+      sharedName: !p.trip && Number(p.nameTrips) > 1,
+      sharedNameLabel: `※ この名前は${p.nameTrips}人が使っています。トリップ無しのこの行は別人の記録が混ざっている可能性があります`,
+      logs: (logs || []).map((k, i) => {
+        const b = BASIS[k && k.basis] || BASIS.ambiguous;
+        return {
+          key: String((k && k.id) || i),
+          url: `https://zinro.net/m/log.php?id=${k && k.id}`,
+          label: `#${k && k.id}`,
+          basisLabel: b.label,
+          basisStyle: b.certain
+            ? { fontSize: 11, color: 'oklch(0.66 0.02 255)' }
+            : { fontSize: 11, color: 'oklch(0.78 0.15 75)' },
+        };
+      }),
+      hasLogs: !!(logs && logs.length),
+      truncated: !!p.kickedLogsTruncated,
+    };
+  }
+
   formatTrollQueryLabel(q) {
     if (!q) return '';
     const parts = [];
@@ -1166,6 +1306,7 @@ class Component extends DCLogic {
     const bump = (extra) => Object.assign({ page: 1 }, extra);
 
     const trollRows = this.trollVisibleRows();
+    const trollFocus = this.trollFocusMatches();
 
     const names = this.parseList(this.state.name);
     const trips = this.parseTripList(this.state.trip);
@@ -1347,6 +1488,23 @@ class Component extends DCLogic {
         ? new Date(this.state.trollReport.data.generatedAt).toLocaleString('ja-JP')
         : '',
       trollReportSourceQueryLabel: this.formatTrollQueryLabel(this.state.trollReport.data && this.state.trollReport.data.query),
+      // Per-person view of the same downloaded report, shown above the ranking
+      // when a name or trip is being searched.
+      trollFocusVisible: hasQuery && trollFocus.length > 0,
+      trollFocusRows: trollFocus.slice(0, TROLL_FOCUS_LIMIT).map((p) => this.buildTrollFocusRow(p)),
+      trollFocusCapped: trollFocus.length > TROLL_FOCUS_LIMIT,
+      trollFocusCappedLabel: `一致した${trollFocus.length}人のうち、追放の多い順に${TROLL_FOCUS_LIMIT}人だけ表示しています。トリップまで指定すれば1人に絞れます。`,
+      trollFocusEmpty: hasQuery && this.state.trollReport.status === 'ready' && trollFocus.length === 0,
+      trollFocusMultiple: trollFocus.length > 1,
+      trollFocusMultipleLabel: `この検索条件に一致する人が${trollFocus.length}人います。トリップが違えば別人なので、合算せず個別に見てください。`,
+      // A name/trip-only report cannot see the villages this person was kicked
+      // out of, because the kick removes them from the roster the search API
+      // indexes. Measured on the cached logs: 54 of 67 kicks (81%) name someone
+      // absent from that log's roster, and a live check confirmed the search
+      // for "さやか" returns 838 villages but not the one she was kicked from.
+      // Silently reporting a low number here would be worse than useless.
+      trollFocusUndercountRisk: this.reportScopeUndercountsKicks(),
+
       trollReportRows: trollRows.map((p) => ({
         key: p.name + '\u0000' + (p.trip || ''),
         name: p.trip ? `${p.name}（${p.trip}）` : p.name,
